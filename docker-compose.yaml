@@ -1,0 +1,15 @@
+services:
+  camunda:
+    image: camunda/camunda-bpm-platform:7.21.0
+    container_name: tavernup_camunda
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_DRIVER=org.postgresql.Driver
+      - DB_URL=jdbc:postgresql://aws-0-eu-central-1.pooler.supabase.com:5432/postgres
+      - DB_USERNAME=postgres.xrmwdfuqeaoredwnerau
+      - DB_PASSWORD=${CAMUNDA_DB_PASSWORD}
+      - DB_CONN_MAXACTIVE=5
+      - DB_CONN_MINIDLE=1
+      - DB_CONN_MAXIDLE=2
+      - DB_VALIDATE_ON_BORROW=true

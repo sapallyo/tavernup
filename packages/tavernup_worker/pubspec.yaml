@@ -1,0 +1,17 @@
+name: tavernup_worker
+description: Backend worker service for TavernUp.
+version: 0.1.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  tavernup_domain:
+    path: ../tavernup_domain
+  shelf: ^1.4.0
+  shelf_router: ^1.1.0
+  dio: ^5.0.0
+  supabase: ^2.0.0
+
+dev_dependencies:
+  test: ^1.24.0

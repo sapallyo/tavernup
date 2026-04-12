@@ -1,0 +1,20 @@
+name: tavernup_client
+description: Flutter client for TavernUp.
+version: 0.1.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.0.0'
+
+dependencies:
+  tavernup_domain:
+    path: ../tavernup_domain
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.0.0
+  go_router: ^14.0.0
+  supabase_flutter: ^2.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
