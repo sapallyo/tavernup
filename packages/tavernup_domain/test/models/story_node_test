@@ -1,0 +1,94 @@
+import 'package:test/test.dart';
+import 'package:tavernup_domain/tavernup_domain.dart';
+
+void main() {
+  group('StoryNode', () {
+    final rootNode = StoryNode(
+      id: 'node-1',
+      title: 'Shadowrun Kampagne',
+      createdBy: 'user-1',
+      createdAt: DateTime(2024, 1, 15),
+    );
+
+    final childNode = StoryNode(
+      id: 'node-2',
+      title: 'Abenteuer 1',
+      parentId: 'node-1',
+      createdBy: 'user-1',
+      createdAt: DateTime(2024, 1, 15),
+      childIds: ['node-3', 'node-4'],
+    );
+
+    group('isRoot / isLeaf', () {
+      test('node without parentId is root', () {
+        expect(rootNode.isRoot, isTrue);
+        expect(rootNode.isLeaf, isTrue);
+      });
+
+      test('node with parentId is not root', () {
+        expect(childNode.isRoot, isFalse);
+      });
+
+      test('node with childIds is not leaf', () {
+        expect(childNode.isLeaf, isFalse);
+      });
+
+      test('node with empty childIds is leaf', () {
+        final leaf = StoryNode(
+          id: 'node-5',
+          title: 'Kapitel 1',
+          parentId: 'node-2',
+          createdBy: 'user-1',
+          createdAt: DateTime(2024, 1, 15),
+        );
+        expect(leaf.isLeaf, isTrue);
+      });
+    });
+
+    group('serialisation', () {
+      test('toJson roundtrip', () {
+        final json = childNode.toJson()
+          ..['created_at'] = childNode.createdAt.toIso8601String();
+        final node = StoryNode.fromJson(json);
+        expect(node.id, childNode.id);
+        expect(node.title, childNode.title);
+        expect(node.parentId, childNode.parentId);
+        expect(node.childIds, childNode.childIds);
+      });
+
+      test('toJson omits null fields', () {
+        final json = rootNode.toJson();
+        expect(json.containsKey('parent_id'), isFalse);
+        expect(json.containsKey('system_key'), isFalse);
+        expect(json.containsKey('description'), isFalse);
+        expect(json.containsKey('image_url'), isFalse);
+      });
+
+      test('fromJson defaults to empty lists', () {
+        final json = {
+          'id': 'node-1',
+          'title': 'Test',
+          'created_by': 'user-1',
+          'created_at': '2024-01-15T00:00:00.000',
+        };
+        final node = StoryNode.fromJson(json);
+        expect(node.childIds, isEmpty);
+        expect(node.characterIds, isEmpty);
+      });
+    });
+
+    group('copyWith', () {
+      test('clearParentId sets parentId to null', () {
+        final updated = childNode.copyWith(clearParentId: true);
+        expect(updated.parentId, isNull);
+        expect(updated.isRoot, isTrue);
+      });
+
+      test('updates childIds', () {
+        final updated = rootNode.copyWith(childIds: ['node-2', 'node-3']);
+        expect(updated.childIds, ['node-2', 'node-3']);
+        expect(updated.isLeaf, isFalse);
+      });
+    });
+  });
+}
