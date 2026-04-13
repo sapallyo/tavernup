@@ -1,6 +1,7 @@
 name: tavernup_worker
 description: Backend worker service for TavernUp.
 version: 0.1.0
+publish_to: 'none'
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
