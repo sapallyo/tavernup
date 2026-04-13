@@ -66,7 +66,7 @@ void main() {
       });
 
       test('different id are not equal', () {
-        final user2 = testUser.copyWith();
+        testUser.copyWith();
         final user3 = User(
           id: 'user-2',
           nickname: 'Shadowrunner',

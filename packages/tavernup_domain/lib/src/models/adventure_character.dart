@@ -49,14 +49,18 @@ class AdventureCharacter extends Equatable {
       roleOverride: json['role_override'] != null
           ? CharacterRoleOverride.fromString(json['role_override'] as String)
           : null,
-      addedAt: DateTime.parse(json['added_at'] as String),
+      addedAt: json['added_at'] != null
+          ? DateTime.parse(json['added_at'] as String)
+          : DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() => {
+        'id': id,
         'user_id': userId,
         'character_id': characterId,
         if (roleOverride != null) 'role_override': roleOverride!.name,
+        'added_at': addedAt.toIso8601String(),
       };
 
   @override
