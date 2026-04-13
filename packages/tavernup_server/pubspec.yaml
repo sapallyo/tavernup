@@ -1,4 +1,4 @@
-name: tavernup_worker
+name: tavernup_server
 description: Backend worker service for TavernUp.
 version: 0.1.0
 publish_to: 'none'
