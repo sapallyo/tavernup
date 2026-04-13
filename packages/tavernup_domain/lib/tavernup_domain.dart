@@ -10,7 +10,9 @@ export 'src/models/session.dart';
 export 'src/models/adventure_character.dart';
 
 // ── Repositories ──────────────────────────────────────────────────────────────
+export 'src/repositories/entity_repository_registry.dart';
 export 'src/repositories/i_character_repository.dart';
+export 'src/repositories/i_entity_repository.dart';
 export 'src/repositories/i_game_group_repository.dart';
 export 'src/repositories/i_invitation_repository.dart';
 export 'src/repositories/i_user_repository.dart';
@@ -18,14 +20,23 @@ export 'src/repositories/i_story_node_repository.dart';
 export 'src/repositories/i_story_node_instance_repository.dart';
 export 'src/repositories/i_session_repository.dart';
 
+// ── Mocks ─────────────────────────────────────────────────────────────────────
+export 'src/mock/mock_user_repository.dart';
+export 'src/mock/mock_character_repository.dart';
+export 'src/mock/mock_game_group_repository.dart';
+export 'src/mock/mock_invitation_repository.dart';
+export 'src/mock/mock_story_node_repository.dart';
+export 'src/mock/mock_story_node_instance_repository.dart';
+export 'src/mock/mock_session_repository.dart';
+
 // ── Process ───────────────────────────────────────────────────────────────────
-export 'src/process/variable.dart';
+export 'src/process/i_process_engine.dart';
 export 'src/process/i_process_task.dart';
+export 'src/process/i_worker.dart';
+export 'src/process/variable.dart';
 export 'src/process/tasks/process_task.dart';
 export 'src/process/tasks/user_task.dart';
 export 'src/process/tasks/worker_task.dart';
-export 'src/process/i_process_engine.dart';
-export 'src/process/i_worker.dart';
 
 // ── Realtime ──────────────────────────────────────────────────────────────────
 export 'src/realtime/realtime_connection_state.dart';

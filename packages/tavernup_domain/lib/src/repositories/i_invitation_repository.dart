@@ -1,16 +1,20 @@
 import '../models/game_group_membership.dart';
 import '../models/invitation.dart';
+import 'i_entity_repository.dart';
 
 /// Repository interface for managing invitations.
 ///
-/// Invitations are created by group admins or game masters and
-/// sent to a specific user. Once accepted, a [GameGroupMembership]
-/// is created and the invitation is no longer active.
+/// Extends [IEntityRepository] so that [EntityWorker] can perform
+/// generic create, update, and delete operations without knowing
+/// the concrete invitation type.
 ///
 /// Implementations:
 /// - `SupabaseInvitationRepository`: persists to Supabase
 /// - `MockInvitationRepository`: in-memory implementation for testing
-abstract interface class IInvitationRepository {
+abstract interface class IInvitationRepository implements IEntityRepository {
+  @override
+  String get entityType => 'invitation';
+
   /// Creates a new pending invitation for [invitedUserId] to join
   /// [gameGroupId] with the given [role].
   Future<Invitation> createInvitation(
@@ -27,14 +31,4 @@ abstract interface class IInvitationRepository {
 
   /// Returns all invitations for [gameGroupId].
   Future<List<Invitation>> getForGameGroup(String gameGroupId);
-
-  /// Updates individual fields of the invitation with [id].
-  ///
-  /// [data] is a map of field names to new values.
-  /// Used to update status, expiry, or other mutable fields
-  /// without replacing the entire invitation.
-  Future<void> updateFields(String id, Map<String, dynamic> data);
-
-  /// Permanently deletes the invitation with [id].
-  Future<void> delete(String id);
 }
