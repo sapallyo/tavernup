@@ -2,7 +2,7 @@
 export 'src/models/character.dart';
 export 'src/models/game_group.dart';
 export 'src/models/game_group_membership.dart';
-export 'src/models/user_profile.dart';
+export 'src/models/user.dart';
 export 'src/models/invitation.dart';
 export 'src/models/campaign.dart';
 export 'src/models/adventure.dart';
@@ -21,7 +21,7 @@ export 'src/process/i_worker.dart';
 export 'src/repositories/i_character_repository.dart';
 export 'src/repositories/i_game_group_repository.dart';
 export 'src/repositories/i_invitation_repository.dart';
-export 'src/repositories/i_user_profile_repository.dart';
+export 'src/repositories/i_user_repository.dart';
 export 'src/repositories/i_campaign_repository.dart';
 export 'src/repositories/i_adventure_repository.dart';
 
