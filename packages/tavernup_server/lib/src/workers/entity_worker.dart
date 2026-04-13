@@ -21,7 +21,7 @@ import 'package:tavernup_domain/tavernup_domain.dart';
 /// field:role         = player
 /// ```
 class EntityWorker implements IWorker {
-  final EntityRegistry _registry;
+  final EntityRepositoryRegistry _registry;
 
   EntityWorker(this._registry);
 

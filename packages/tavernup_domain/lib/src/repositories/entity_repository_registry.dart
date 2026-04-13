@@ -1,10 +1,10 @@
 import 'package:tavernup_domain/tavernup_domain.dart';
 
-/// Concrete implementation of [IEntityRegistry].
+/// Concrete implementation of [IEntityRepositoryRegistry].
 ///
 /// Repositories are registered at startup and looked up by entity type
 /// string during worker task processing.
-class EntityRegistry {
+class EntityRepositoryRegistry {
   final Map<String, IEntityRepository> _repositories = {};
 
   void register(IEntityRepository repository) {
