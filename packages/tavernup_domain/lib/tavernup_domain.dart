@@ -4,9 +4,19 @@ export 'src/models/game_group.dart';
 export 'src/models/game_group_membership.dart';
 export 'src/models/user.dart';
 export 'src/models/invitation.dart';
-export 'src/models/campaign.dart';
-export 'src/models/adventure.dart';
+export 'src/models/story_node.dart';
+export 'src/models/story_node_instance.dart';
+export 'src/models/session.dart';
 export 'src/models/adventure_character.dart';
+
+// ── Repositories ──────────────────────────────────────────────────────────────
+export 'src/repositories/i_character_repository.dart';
+export 'src/repositories/i_game_group_repository.dart';
+export 'src/repositories/i_invitation_repository.dart';
+export 'src/repositories/i_user_repository.dart';
+export 'src/repositories/i_story_node_repository.dart';
+export 'src/repositories/i_story_node_instance_repository.dart';
+export 'src/repositories/i_session_repository.dart';
 
 // ── Process ───────────────────────────────────────────────────────────────────
 export 'src/process/variable.dart';
@@ -16,14 +26,6 @@ export 'src/process/tasks/user_task.dart';
 export 'src/process/tasks/worker_task.dart';
 export 'src/process/i_process_engine.dart';
 export 'src/process/i_worker.dart';
-
-// ── Repositories ──────────────────────────────────────────────────────────────
-export 'src/repositories/i_character_repository.dart';
-export 'src/repositories/i_game_group_repository.dart';
-export 'src/repositories/i_invitation_repository.dart';
-export 'src/repositories/i_user_repository.dart';
-export 'src/repositories/i_campaign_repository.dart';
-export 'src/repositories/i_adventure_repository.dart';
 
 // ── Realtime ──────────────────────────────────────────────────────────────────
 export 'src/realtime/realtime_connection_state.dart';
