@@ -7,8 +7,9 @@ import 'package:equatable/equatable.dart';
 /// rather than an enum — the platform is system-agnostic and new
 /// rulesets can be added without code changes.
 ///
-/// A group can have multiple campaigns and adventures, and its members
-/// each hold a [GameGroupRole] defined in their [GameGroupMembership].
+/// A group owns an ordered list of [sessionIds] representing the
+/// sessions played by this group. Members and their roles are managed
+/// via [GameGroupMembership].
 class GameGroup extends Equatable {
   final String id;
   final String name;
@@ -18,6 +19,11 @@ class GameGroup extends Equatable {
   final DateTime createdAt;
   final String? imageUrl;
 
+  /// Ordered list of session IDs owned by this group.
+  ///
+  /// The order reflects the chronological sequence of sessions.
+  final List<String> sessionIds;
+
   const GameGroup({
     required this.id,
     required this.name,
@@ -26,6 +32,7 @@ class GameGroup extends Equatable {
     this.ruleset = 'generic',
     required this.createdAt,
     this.imageUrl,
+    this.sessionIds = const [],
   });
 
   factory GameGroup.fromJson(Map<String, dynamic> json) {
@@ -37,6 +44,7 @@ class GameGroup extends Equatable {
       ruleset: json['ruleset'] as String? ?? 'generic',
       createdAt: DateTime.parse(json['created_at'] as String),
       imageUrl: json['image_url'] as String?,
+      sessionIds: List<String>.from(json['session_ids'] ?? []),
     );
   }
 
@@ -45,6 +53,7 @@ class GameGroup extends Equatable {
     String? description,
     String? ruleset,
     String? imageUrl,
+    List<String>? sessionIds,
     bool clearImage = false,
     bool clearDescription = false,
   }) {
@@ -56,6 +65,7 @@ class GameGroup extends Equatable {
       ruleset: ruleset ?? this.ruleset,
       createdAt: createdAt,
       imageUrl: clearImage ? null : imageUrl ?? this.imageUrl,
+      sessionIds: sessionIds ?? this.sessionIds,
     );
   }
 
@@ -66,9 +76,18 @@ class GameGroup extends Equatable {
         'created_by': createdBy,
         if (imageUrl != null) 'image_url': imageUrl,
         'ruleset': ruleset,
+        'session_ids': sessionIds,
       };
 
   @override
-  List<Object?> get props =>
-      [id, name, description, createdBy, ruleset, createdAt, imageUrl];
+  List<Object?> get props => [
+        id,
+        name,
+        description,
+        createdBy,
+        ruleset,
+        createdAt,
+        imageUrl,
+        sessionIds
+      ];
 }
