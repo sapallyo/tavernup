@@ -28,10 +28,12 @@ export 'src/mock/mock_invitation_repository.dart';
 export 'src/mock/mock_story_node_repository.dart';
 export 'src/mock/mock_story_node_instance_repository.dart';
 export 'src/mock/mock_session_repository.dart';
+export 'src/mock/mock_user_task_repository.dart';
 
 // ── Process ───────────────────────────────────────────────────────────────────
 export 'src/process/i_process_engine.dart';
 export 'src/process/i_process_task.dart';
+export 'src/process/i_user_task_repository.dart';
 export 'src/process/i_worker.dart';
 export 'src/process/variable.dart';
 export 'src/process/tasks/process_task.dart';
@@ -39,10 +41,10 @@ export 'src/process/tasks/user_task.dart';
 export 'src/process/tasks/worker_task.dart';
 
 // ── Realtime ──────────────────────────────────────────────────────────────────
-export 'src/realtime/realtime_connection_state.dart';
+export 'src/realtime/i_process_event_service.dart';
 export 'src/realtime/i_realtime_transport.dart';
-export 'src/realtime/services/i_process_event_service.dart';
-export 'src/realtime/services/i_sync_service.dart';
+export 'src/realtime/i_sync_service.dart';
+export 'src/realtime/realtime_connection_state.dart';
 
 // ── SR5 system ────────────────────────────────────────────────────────────────
 export 'src/systems/sr5/stat_modifier.dart';
