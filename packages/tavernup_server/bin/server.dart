@@ -3,18 +3,23 @@ import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
-import 'package:tavernup_domain/tavernup_domain.dart';
+import 'package:supabase/supabase.dart';
+import 'package:tavernup_repositories_supabase/tavernup_repositories_supabase.dart';
 
 import 'package:tavernup_server/src/websocket/message_handler.dart';
 import 'package:tavernup_server/src/websocket/websocket_server.dart';
 import 'package:tavernup_server/src/webhook/webhook_handler.dart';
 
 void main() async {
-  // TODO: replace with Supabase repository implementations
-  final userTaskRepository = MockUserTaskRepository();
-  final userRepository = MockUserRepository();
-  // ignore: unused_local_variable
-  final entityRegistry = EntityRepositoryRegistry();
+  final supabaseUrl = Platform.environment['SUPABASE_URL'] ??
+      (throw Exception('SUPABASE_URL not set'));
+  final supabaseKey = Platform.environment['SUPABASE_SERVICE_ROLE_KEY'] ??
+      (throw Exception('SUPABASE_SERVICE_ROLE_KEY not set'));
+
+  final client = SupabaseClient(supabaseUrl, supabaseKey);
+
+  final userRepository = SupabaseUserRepository(client);
+  final userTaskRepository = SupabaseUserTaskRepository(client);
 
   final messageHandler = MessageHandler(
     userRepository: userRepository,
