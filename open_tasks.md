@@ -84,3 +84,25 @@ Verify all 8 Supabase repository implementations against a real (or test) Supaba
 |---|---|
 | Camunda `ACT_` tables in `public` schema | Supabase pooler prevents dedicated `camunda` schema. Accepted for now, revisit for TeamUp with dedicated DB. |
 | Notifications after invitation accept/reject | Inviting user currently receives no notification. Needs process extension or separate Realtime subscription. |
+
+---
+
+## Backlog / Future Ideas
+
+### SR5 Combat Simulator
+
+Two distinct components with different characteristics:
+
+**Runtime Component** — supports real play sessions: tracks state of all participants across an entire combat, calculates dice pool composition and difficulty for player actions, applies results automatically, optionally auto-rolls for NPCs.
+
+**Statistics Component** — fully automated simulation mode for playtesting house rules: runs a defined combat scenario N times across various configurations, aggregates results to assess rule balancing.
+
+### Architecture Notes
+- The statistics component has no human actors, no wait states, no persistent inter-step state — a process engine (Camunda/BPMN) makes no sense here. Pure computation.
+- The runtime component involves human decisions and sequential phases — BPMN may be worth exploring as a learning exercise, to understand where it adds value and where it becomes a constraint.
+- Both components share the same rule logic. A clean separation into a **C++ microservice** is worth considering:
+  - Stateless from the network perspective: receives combat state + action, returns new state + result
+  - Communicates with `tavernup_server` via HTTP or WebSocket
+  - No FFI/JNI — separate process with a well-defined API boundary
+  - Statistics component reuses the exact same rule engine as the runtime component
+  - Side benefit: practical experience with cross-language service integration
