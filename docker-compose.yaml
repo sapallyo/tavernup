@@ -1,15 +1,48 @@
 services:
-  camunda:
-    image: camunda/camunda-bpm-platform:7.21.0
-    container_name: tavernup_camunda
+
+  tavernup_server:
+    build:
+      context: ./packages
+      dockerfile: tavernup_server/Dockerfile
+    container_name: tavernup_server
     ports:
       - "8080:8080"
     environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - CAMUNDA_BASE_URL=http://tavernup_camunda:8080/engine-rest
+      - PORT=8080
+
+  camunda-db:
+    image: postgres:16
+    container_name: tavernup_camunda_db
+    environment:
+      - POSTGRES_DB=camunda
+      - POSTGRES_USER=camunda
+      - POSTGRES_PASSWORD=${CAMUNDA_DB_PASSWORD}
+    volumes:
+      - camunda_db_data:/var/lib/postgresql/data
+
+  camunda:
+    build:
+      context: ./camunda-webhook
+      dockerfile: Dockerfile
+    container_name: tavernup_camunda
+    ports:
+      - "8081:8080"
+    environment:
       - DB_DRIVER=org.postgresql.Driver
-      - DB_URL=jdbc:postgresql://aws-0-eu-central-1.pooler.supabase.com:5432/postgres
-      - DB_USERNAME=postgres.xrmwdfuqeaoredwnerau
+      - DB_URL=jdbc:postgresql://camunda-db:5432/camunda
+      - DB_USERNAME=camunda
       - DB_PASSWORD=${CAMUNDA_DB_PASSWORD}
       - DB_CONN_MAXACTIVE=5
       - DB_CONN_MINIDLE=1
       - DB_CONN_MAXIDLE=2
       - DB_VALIDATE_ON_BORROW=true
+      - TAVERNUP_WEBHOOK_URL=http://tavernup_server:8080/webhook/task-created
+    depends_on:
+      - camunda-db
+      - tavernup_server
+
+volumes:
+  camunda_db_data:
