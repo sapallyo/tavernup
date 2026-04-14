@@ -23,6 +23,16 @@ class Variable extends Equatable {
   factory Variable.json(Map<String, dynamic> value) =>
       Variable._(type: VariableType.json, value: value);
 
+  factory Variable.fromTypeAndValue(VariableType type, dynamic value) {
+    return switch (type) {
+      VariableType.string => Variable.string(value as String),
+      VariableType.integer => Variable.integer(value as int),
+      VariableType.double => Variable.double((value as num).toDouble()),
+      VariableType.boolean => Variable.boolean(value as bool),
+      VariableType.json => Variable.json(value as Map<String, dynamic>),
+    };
+  }
+
   @override
   List<Object?> get props => [type, value];
 
