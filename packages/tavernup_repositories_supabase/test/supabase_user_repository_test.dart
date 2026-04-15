@@ -9,22 +9,15 @@ void main() {
   late SupabaseClient client;
   late SupabaseUserRepository repository;
 
-  setUp(() {
+  setUp(() async {
     client = createTestClient();
     repository = SupabaseUserRepository(client);
-  });
-
-  tearDown(() async {
-    await client
-        .from('users')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
+    await cleanTestData(client);
   });
 
   group('SupabaseUserRepository', () {
     test('save and getById round-trip', () async {
-      final authId = await createTestAuthUser(client, 'testuser@test.local');
-      addTearDown(() => deleteTestAuthUser(client, authId));
+      final authId = await createTestAuthUser(client, testEmail('testuser'));
 
       final user = User(
         id: authId,
@@ -41,8 +34,7 @@ void main() {
     });
 
     test('findByNickname returns correct user', () async {
-      final authId = await createTestAuthUser(client, 'findme@test.local');
-      addTearDown(() => deleteTestAuthUser(client, authId));
+      final authId = await createTestAuthUser(client, testEmail('findme'));
 
       final user = User(
         id: authId,
