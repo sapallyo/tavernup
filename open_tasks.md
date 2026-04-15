@@ -75,6 +75,7 @@ Verify all 8 Supabase repository implementations against a real (or test) Supaba
 - Tests require live Supabase connection (use `.env` credentials)
 - RLS policies must be tested explicitly (service_role vs. user token)
 - `user_tasks.id` is `text` — verify Camunda task ID roundtrip
+- RLS policies currently disabled — anon client tests deferred until RBAC is implemented
 
 ---
 
@@ -84,6 +85,7 @@ Verify all 8 Supabase repository implementations against a real (or test) Supaba
 |---|---|
 | Camunda `ACT_` tables in `public` schema | Supabase pooler prevents dedicated `camunda` schema. Accepted for now, revisit for TeamUp with dedicated DB. |
 | Notifications after invitation accept/reject | Inviting user currently receives no notification. Needs process extension or separate Realtime subscription. |
+| RBAC / Access Control | All RLS policies removed temporarily. Dedicated RBAC concept required — role-based, covering both TavernUp and TeamUp (incl. §203 StGB implications). To be designed before Flutter client goes live. |
 
 ---
 
