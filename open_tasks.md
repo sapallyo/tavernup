@@ -29,26 +29,53 @@ Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp serve
 
 ## 2. Flutter Client
 
-**Status**: 🔲 Scaffolded, empty  
+**Status**: 🔲 In Arbeit  
 **Depends on**: ~~Task 1 (Camunda webhook)~~ ✅ resolved
 
-### Goal
-Flutter client implementing the user-facing side of TavernUp process flows.
+### Wiederverwendung aus altem Client (sr5_tool)
+- **Direkt**: DomainTile-Hierarchie, TileGrid, UserAvatar, SectionHeader,
+  LoginScreen, Riverpod-Setup, go_router + AuthGate
+- **Struktur übernehmen, Logik ersetzen**: LobbyScreen, GameGroupDetailScreen,
+  CharacterDetailScreen — Layout gut, Provider-Calls auf Interfaces umstellen
+- **Neu schreiben**: InviteFlow-Screens, InvitationMarker/InviteDialog
+  (war link-basiert, jetzt BPMN UserTask über IUserTaskRepository + WebSocket)
+- **Nicht kopieren**: Models + Repositories — bereits in tavernup_domain
+  und tavernup_repositories_supabase
+
+### Phasen
+
+**Phase 1 — Fundament**
+- [ ] `IAuthService` in `tavernup_domain` definieren
+- [ ] `tavernup_auth_supabase` Package anlegen, `SupabaseAuthService` implementieren
+- [ ] `architecture.md` aktualisieren (neues Package eintragen)
+- [ ] `pubspec.yaml` mit allen Dependencies
+- [ ] `main.dart` + Riverpod-Setup mit Interface-basierter Provider-Injection
+
+**Phase 2 — Transport-Layer**
+- [ ] `WebSocketRealtimeTransport` implementiert `IRealtimeTransport`
+- [ ] `ProcessEventService` implementiert `IProcessEventService`
+- [ ] `SyncService` implementiert `ISyncService`
+
+**Phase 3 — Direkt wiederverwendbare UI**
+- [ ] DomainTile-Hierarchie + TileGrid übernehmen
+- [ ] UserAvatar, SectionHeader übernehmen
+- [ ] LoginScreen übernehmen (Imports anpassen)
+- [ ] go_router-Struktur + AuthGate übernehmen
+
+**Phase 4 — Screens mit Logik-Refactoring**
+- [ ] LobbyScreen: Layout übernehmen, Provider auf Interfaces umstellen
+- [ ] GameGroupDetailScreen: Layout übernehmen, Einladungslogik entfernen
+- [ ] CharacterDetailScreen: Layout übernehmen, ICharacterRepository einbinden
+
+**Phase 5 — Neu schreiben**
+- [ ] InviteFlow-Screens (BPMN UserTask-getrieben via WebSocket)
+- [ ] InvitationMarker + InviteDialog (IUserTaskRepository + Pending-Badge)
 
 ### Key interfaces to implement (from `tavernup_domain`)
-- `IRealtimeTransport` — WebSocket connection to `tavernup_server`
-- `IProcessEventService` — semantic process events (task pending, task completed)
-- `ISyncService` — state sync across devices
-
-### First screens to build (suggested order)
-1. Login / Auth (Supabase Auth)
-2. Game Group overview
-3. Invitation flow (first complete BPMN process end-to-end)
-4. Session / Character views
-
-### State management
-- Riverpod throughout
-- Routing: go_router
+- `IAuthService` — Authentifizierung (signIn, signOut, currentUser)
+- `IRealtimeTransport` — WebSocket-Verbindung zu tavernup_server
+- `IProcessEventService` — UserTask push + completion
+- `ISyncService` — Domain-Daten als Streams
 
 ---
 
