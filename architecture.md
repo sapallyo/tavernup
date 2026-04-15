@@ -4,12 +4,15 @@
 
 Mono-repo: `/Users/juergendissinger/PrivateProjects/tavernup`
 
+Packages liegen unter `packages/`.
+
 | Package | Language | Status |
 |---|---|---|
 | `tavernup_domain` | Dart | ✅ Complete, all tests green |
-| `tavernup_server` | Dart | ✅ Complete, all tests green |
+| `tavernup_auth_supabase` | Dart | 🔲 Neu anlegen |
 | `tavernup_repositories_supabase` | Dart | ✅ All 8 implementations done |
-| `tavernup_client` | Flutter 3.27.4 / Dart 3.6.2 | 🔲 Scaffolded, empty |
+| `tavernup_server` | Dart | ✅ Complete, all tests green |
+| `tavernup_client` | Flutter 3.27.4 / Dart 3.6.2 | 🔲 In Arbeit |
 
 Flutter SDK: `/Users/juergendissinger/flutter` (pinned — macOS Ventura 13.7.8 incompatibility with newer versions)
 

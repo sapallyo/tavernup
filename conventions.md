@@ -53,19 +53,51 @@ Reference file: `tavernup_architecture_v14.html` (in project files)
 
 ```
 tavernup/
-├── tavernup_domain/         # Domain models, interfaces, mocks
-│   └── lib/
-│       ├── models/          # Core domain models
-│       ├── sr5/             # SR5 system models
-│       ├── repositories/    # Repository interfaces
-│       └── process/         # IUserTaskRepository, realtime interfaces
-├── tavernup_server/         # WebSocket server, EntityWorker, handlers
-│   └── bin/
-│       └── server.dart      # Entry point
-├── tavernup_repositories_supabase/  # Supabase implementations
-└── tavernup_client/         # Flutter app (empty)
+└── packages/
+    ├── tavernup_domain/
+    │   ├── lib/
+    │   │   ├── src/
+    │   │   │   ├── mock/
+    │   │   │   ├── models/
+    │   │   │   ├── process/
+    │   │   │   ├── realtime/
+    │   │   │   ├── repositories/
+    │   │   │   ├── systems/
+    │   │   │   └── auth/          # IAuthService
+    │   │   └── tavernup_domain.dart
+    │   └── test/
+    ├── tavernup_auth_supabase/
+    │   ├── lib/
+    │   │   ├── src/
+    │   │   │   └── supabase_auth_service.dart
+    │   │   └── tavernup_auth_supabase.dart
+    │   └── pubspec.yaml
+    ├── tavernup_repositories_supabase/
+    │   ├── lib/
+    │   │   ├── src/
+    │   │   └── tavernup_repositories_supabase.dart
+    │   └── test/
+    ├── tavernup_server/
+    │   ├── bin/
+    │   │   └── server.dart
+    │   ├── lib/
+    │   │   └── src/
+    │   │       ├── webhook/
+    │   │       ├── websocket/
+    │   │       └── workers/
+    │   └── test/
+    └── tavernup_client/
+        ├── lib/
+        │   ├── src/
+        │   │   ├── infrastructure/  # WebSocketRealtimeTransport
+        │   │   ├── services/        # ProcessEventService, SyncService
+        │   │   ├── state/           # Riverpod providers
+        │   │   └── ui/
+        │   │       ├── screens/
+        │   │       └── widgets/
+        │   └── main.dart            # DI-Setup, nur hier konkrete Typen
+        └── test/
 ```
-
 ---
 
 ## Server
