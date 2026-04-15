@@ -3,7 +3,6 @@
 .flutter-plugins-dependencies
 pubspec.lock
 build/
-.env
+.env*
 *.env.DS_Store
 **/.DS_Store
-.env

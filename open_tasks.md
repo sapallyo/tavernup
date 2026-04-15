@@ -2,7 +2,7 @@
 
 ## Priority Order
 
-1. **Camunda Docker Image** (Blocker for end-to-end flow)
+1. ~~**Camunda Docker Image**~~ ✅ Done
 2. **Flutter Client** (Final layer)
 3. **Integration Tests** (Supabase repositories)
 
@@ -10,7 +10,7 @@
 
 ## 1. Camunda Docker Image with Java TaskListener
 
-**Status**: 🔲 Not started  
+**Status**: 🔲 Done  
 **Blocks**: End-to-end process flow, client development
 
 ### Goal
@@ -38,7 +38,7 @@ Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp serve
 ## 2. Flutter Client
 
 **Status**: 🔲 Scaffolded, empty  
-**Depends on**: Task 1 (Camunda webhook) for meaningful end-to-end testing
+**Depends on**: ~~Task 1 (Camunda webhook)~~ ✅ resolved
 
 ### Goal
 Flutter client implementing the user-facing side of TavernUp process flows.
