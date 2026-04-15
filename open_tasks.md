@@ -4,14 +4,13 @@
 
 1. ~~**Camunda Docker Image**~~ ✅ Done
 2. **Flutter Client** (Final layer)
-3. **Integration Tests** (Supabase repositories)
+3. ~~**Integration Tests** (Supabase repositories)~~ ✅ Done
 
 ---
 
 ## 1. Camunda Docker Image with Java TaskListener
 
-**Status**: 🔲 Done  
-**Blocks**: End-to-end process flow, client development
+**Status**: ✅ Done
 
 ### Goal
 Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp server whenever a task is created — for both UserTasks and ExternalTasks.
@@ -25,13 +24,6 @@ Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp serve
 - `WebhookHandler` receives and routes the webhook
 - UserTasks → stored in `user_tasks` table (Supabase), forwarded via Realtime
 - ExternalTasks → triggers `fetchAndLock` in `EntityWorker`
-
-### What needs to be built
-- Java `TaskListener` implementing `org.camunda.bpm.engine.delegate.TaskListener`
-- Registered for `create` event on all tasks in `processes.xml` or via engine plugin
-- HTTP POST using plain Java (no external dependencies preferred)
-- Dockerfile extending `camunda/camunda-bpm-platform:7.21.0`
-- Updated `docker-compose.yml`
 
 ---
 
@@ -62,20 +54,15 @@ Flutter client implementing the user-facing side of TavernUp process flows.
 
 ## 3. Integration Tests – Supabase Repositories
 
-**Status**: 🔲 Not started  
+**Status**: ✅ Done  
 **Package**: `tavernup_repositories_supabase`
 
-### Goal
-Verify all 8 Supabase repository implementations against a real (or test) Supabase instance.
-
-### Repositories to cover
-`SupabaseUserRepository`, `SupabaseGameGroupRepository`, `SupabaseInvitationRepository`, `SupabaseCharacterRepository`, `SupabaseSessionRepository`, `SupabaseStoryNodeRepository`, `SupabaseStoryNodeInstanceRepository`, `SupabaseUserTaskRepository`
-
 ### Notes
-- Tests require live Supabase connection (use `.env` credentials)
-- RLS policies must be tested explicitly (service_role vs. user token)
-- `user_tasks.id` is `text` — verify Camunda task ID roundtrip
-- RLS policies currently disabled — anon client tests deferred until RBAC is implemented
+- Tests run against local Supabase instance (Docker)
+- Service-role key used throughout — RLS bypassed
+- RLS policies currently disabled — see RBAC backlog item
+- `user_tasks.id` is `text` — Camunda task ID roundtrip verified
+- `dart_test.yaml` sets `concurrency: 1` — required for DB isolation
 
 ---
 
