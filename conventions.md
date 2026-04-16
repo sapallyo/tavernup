@@ -14,7 +14,7 @@
 
 ## Dart / Flutter
 
-- Dart 3.6.2, Flutter 3.27.4 (pinned)
+- Flutter 3.41.6 / Dart 3.11.4 (pinned via `fvm`, siehe `.fvmrc`)
 - State management: **Riverpod**
 - Routing: **go_router**
 - No unnecessary comments on self-explanatory code
