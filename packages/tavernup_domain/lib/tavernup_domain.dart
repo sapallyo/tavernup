@@ -1,3 +1,7 @@
+// ── Auth ─────────────────────────────────────────────────────────────────────
+export 'src/auth/auth_user.dart';
+export 'src/auth/i_auth_service.dart';
+
 // ── Core models ──────────────────────────────────────────────────────────────
 export 'src/models/character.dart';
 export 'src/models/game_group.dart';

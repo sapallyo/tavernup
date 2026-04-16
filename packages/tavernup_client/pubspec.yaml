@@ -34,10 +34,15 @@ dependencies:
     sdk: flutter
   tavernup_domain:
     path: ../tavernup_domain
+  tavernup_auth_supabase:
+    path: ../tavernup_auth_supabase
+  tavernup_repositories_supabase:
+    path: ../tavernup_repositories_supabase
   flutter_riverpod: ^2.6.0
   go_router: ^14.6.0
   supabase_flutter: ^2.0.0
-
+  web_socket_channel: ^3.0.0
+  
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

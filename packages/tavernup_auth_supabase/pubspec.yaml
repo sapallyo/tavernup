@@ -1,0 +1,12 @@
+name: tavernup_auth_supabase
+description: Supabase implementation of IAuthService for TavernUp.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.6.2 <4.0.0'
+
+dependencies:
+  tavernup_domain:
+    path: ../tavernup_domain
+  supabase_flutter: ^2.0.0
