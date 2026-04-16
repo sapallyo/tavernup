@@ -54,27 +54,67 @@ Flutter SDK: `/Users/juergendissinger/flutter` (pinned — macOS Ventura 13.7.8 
 
 ```
 tavernup_client (Flutter)
-       │  WebSocket (requestId pattern)
+│  WebSocket (requestId pattern) — Process-Events + fachliche Aktionen
+│  Supabase direkt — Reads + einfache Preference-Writes
 tavernup_server (Dart)
-       │  fetchAndLock (External Tasks)
-       │  Webhook receiver (/webhook/task-created)
-    Camunda 7
-       │  PostgreSQL tables (ACT_*)
-    Supabase (PostgreSQL + Realtime)
+│  fetchAndLock (External Tasks)
+│  Webhook receiver (/webhook/task-created)
+│  UserTask push → WebSocket → Client
+Camunda 7
+│  PostgreSQL tables (ACT_*)
+Supabase (PostgreSQL + Realtime)
 ```
+
+### Client–Server Responsibility Split
+
+**Client** is responsible for UI rendering, navigation, local UI state,
+and basic UX validation (e.g. required fields).
+
+**Server** is responsible for all business logic, authorization checks,
+and orchestration via Camunda. Multiple client platforms (web, tablet,
+mobile) share the same server-side logic — no duplication across clients.
+
+### Data Access Principles
+
+- **Reads** — always direct via `tavernup_repositories_supabase` interfaces.
+  No server roundtrip for read operations.
+- **Preference writes** — direct via repository (nickname, avatar, UI settings).
+  No business logic involved, no server needed.
+- **Business writes** — via WebSocket to server, decided case-by-case.
+  Applies when validation, authorization, or process triggers are involved
+  (e.g. creating a group, assigning a character to a session).
+- **Process events** — always via WebSocket (UserTask push, complete-task).
+
+This is a deliberate pragmatic split, not a strict rule. The decision is
+made per feature. The interface boundaries ensure the split can evolve
+without rearchitecting.
+
+### Shared Repository Layer
+
+`tavernup_repositories_supabase` is used by both server and client —
+it is the single implementation of all domain repository interfaces.
+Neither server nor client has its own data access code.
+Replacing Supabase (e.g. for TeamUp's German hosting requirements)
+means replacing one package, not touching server and client separately.
 
 ### Communication Flow
 - Client ↔ Server via **WebSocket** (requestId pattern for synchronous calls)
-- Camunda **TaskListener** (create-event) fires HTTP POST to `/webhook/task-created` for both UserTasks and ExternalTasks
-- UserTasks → stored in `pending_user_tasks`, forwarded to client via Realtime
+- Camunda **TaskListener** (create-event) fires HTTP POST to
+  `/webhook/task-created` for both UserTasks and ExternalTasks
+- UserTasks → stored in `user_tasks` (Supabase), then pushed via
+  WebSocket to the assigned client
 - ExternalTasks → triggers `fetchAndLock` in `EntityWorker`
 - Safety-net poll ~60s as fallback (no primary poll timer)
+- On WebSocket connect: server delivers all pending UserTasks for
+  the authenticated user
 
 ### Realtime Abstraction
-- Layer 1: `IRealtimeTransport` — transport abstraction (WebSocket / Supabase Realtime)
-- Layer 2: `IProcessEventService` / `ISyncService` — semantic services
-- Supabase Realtime is fully hidden behind `IRealtimeTransport` → swappable for TeamUp
-
+- Layer 1: `IRealtimeTransport` — WebSocket transport to tavernup_server
+- Layer 2: `IProcessEventService` — UserTask push + completion via WebSocket
+- Layer 3: `ISyncService` — domain data streams via Supabase directly
+- Supabase is encapsulated in `tavernup_repositories_supabase` →
+  swappable for TeamUp without touching client or server code
+  
 ---
 
 ## Domain Models (`tavernup_domain`)
