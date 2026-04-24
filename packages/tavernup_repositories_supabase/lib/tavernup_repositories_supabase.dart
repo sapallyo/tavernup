@@ -6,3 +6,4 @@ export 'src/supabase_story_node_repository.dart';
 export 'src/supabase_story_node_instance_repository.dart';
 export 'src/supabase_user_repository.dart';
 export 'src/supabase_user_task_repository.dart';
+export 'src/supabase_sync_service.dart';

@@ -74,7 +74,7 @@ tavernup/
     │   └── pubspec.yaml
     ├── tavernup_repositories_supabase/
     │   ├── lib/
-    │   │   ├── src/
+    │   │   ├── src/                   # Repos + SupabaseSyncService
     │   │   └── tavernup_repositories_supabase.dart
     │   └── test/
     ├── tavernup_server/
@@ -90,7 +90,7 @@ tavernup/
         ├── lib/
         │   ├── src/
         │   │   ├── infrastructure/  # WebSocketRealtimeTransport
-        │   │   ├── services/        # ProcessEventService, SyncService
+        │   │   ├── services/        # ProcessEventService
         │   │   ├── state/           # Riverpod providers
         │   │   └── ui/
         │   │       ├── screens/
