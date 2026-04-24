@@ -40,6 +40,25 @@ abstract interface class IRealtimeTransport {
   /// Throws if the transport is not connected.
   Future<void> publish(String topic, Map<String, dynamic> payload);
 
+  /// Sends a request and returns the correlated response payload.
+  ///
+  /// Implements the requestId pattern for synchronous request/response
+  /// semantics over an asynchronous transport. The implementation
+  /// assigns a unique requestId, sends the message, and completes the
+  /// returned future when the matching response arrives.
+  ///
+  /// [type] identifies the server-side handler (e.g. `validate-user`,
+  /// `complete-task`). The resulting map is the `data` field of a
+  /// successful response.
+  ///
+  /// Throws with the server-provided error message if the server
+  /// responds with `success: false`, or if the transport is not
+  /// connected / the connection drops before a response arrives.
+  Future<Map<String, dynamic>> request(
+    String type,
+    Map<String, dynamic> payload,
+  );
+
   /// Opens the connection.
   ///
   /// Must be called before [subscribe] or [publish].
