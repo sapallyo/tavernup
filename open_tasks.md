@@ -44,30 +44,30 @@ Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp serve
 
 ### Phasen
 
-**Phase 1 — Fundament**
-- [ ] `IAuthService` in `tavernup_domain` definieren
-- [ ] `tavernup_auth_supabase` Package anlegen, `SupabaseAuthService` implementieren
-- [ ] `architecture.md` aktualisieren (neues Package eintragen)
-- [ ] `pubspec.yaml` mit allen Dependencies
-- [ ] `main.dart` + Riverpod-Setup mit Interface-basierter Provider-Injection
+**Phase 1 — Fundament** ✅
+- [x] `IAuthService` in `tavernup_domain` definieren
+- [x] `tavernup_auth_supabase` Package anlegen, `SupabaseAuthService` implementieren
+- [x] `architecture.md` aktualisieren (neues Package eintragen)
+- [x] `pubspec.yaml` mit allen Dependencies
+- [x] `main.dart` + Riverpod-Setup mit Interface-basierter Provider-Injection
 
-**Phase 2 — Transport-Layer**
-- [ ] `WebSocketRealtimeTransport` implementiert `IRealtimeTransport`
-- [ ] `ProcessEventService` implementiert `IProcessEventService`
-- [ ] `SyncService` implementiert `ISyncService`
+**Phase 2 — Transport-Layer** ✅
+- [x] `WebSocketRealtimeTransport` implementiert `IRealtimeTransport` (`tavernup_client/infrastructure/`)
+- [x] `ProcessEventService` implementiert `IProcessEventService` (`tavernup_client/services/`)
+- [x] `SupabaseSyncService` implementiert `ISyncService` (`tavernup_repositories_supabase`)
 
-**Phase 3 — Direkt wiederverwendbare UI**
+**Phase 3 — Direkt wiederverwendbare UI** 🔲 blockiert (sr5_tool-Code nicht verfügbar)
 - [ ] DomainTile-Hierarchie + TileGrid übernehmen
 - [ ] UserAvatar, SectionHeader übernehmen
 - [ ] LoginScreen übernehmen (Imports anpassen)
 - [ ] go_router-Struktur + AuthGate übernehmen
 
-**Phase 4 — Screens mit Logik-Refactoring**
+**Phase 4 — Screens mit Logik-Refactoring** 🔲 blockiert (sr5_tool-Code nicht verfügbar)
 - [ ] LobbyScreen: Layout übernehmen, Provider auf Interfaces umstellen
 - [ ] GameGroupDetailScreen: Layout übernehmen, Einladungslogik entfernen
 - [ ] CharacterDetailScreen: Layout übernehmen, ICharacterRepository einbinden
 
-**Phase 5 — Neu schreiben**
+**Phase 5 — Neu schreiben** 🔲
 - [ ] InviteFlow-Screens (BPMN UserTask-getrieben via WebSocket)
 - [ ] InvitationMarker + InviteDialog (IUserTaskRepository + Pending-Badge)
 
@@ -90,6 +90,30 @@ Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp serve
 - RLS policies currently disabled — see RBAC backlog item
 - `user_tasks.id` is `text` — Camunda task ID roundtrip verified
 - `dart_test.yaml` sets `concurrency: 1` — required for DB isolation
+
+---
+
+## 4. Camunda Integration
+
+**Status**: ✅ Wired (unit-tested); 🔲 not yet verified end-to-end
+
+### Done
+- `tavernup_process_camunda` package with `CamundaProcessEngine` (Dio over `/engine-rest`)
+- `WorkerRunner` in `tavernup_server` — fetchAndLock → IWorker.execute → complete/fail
+- `server.dart`: completeUserTask + onExternalTaskCreated wired; safety-net `Timer.periodic(60s)`
+- `CAMUNDA_BASE_URL` env var required at server start
+- Dockerfile updated (Dart 3.11, all packages copied)
+- 12 unit tests for CamundaProcessEngine (fake Dio adapter)
+- 5 tests for WorkerRunner (MockProcessEngine)
+
+### Open — blocking end-to-end verification
+- [ ] Invitation BPMN (`invitation-process.bpmn`) auf der VM verfügbar machen —
+      liegt aktuell auf dem alten Mac mit der UI
+- [ ] Camunda + Camunda-DB hochfahren: `docker compose up -d camunda-db camunda`
+- [ ] BPMN in Camunda deployen (via `CamundaProcessEngine.deploy` oder Web-UI)
+- [ ] Einen Invitation-Prozess starten und durch alle Schritte laufen lassen
+- [ ] Ggf. BPMN-Anpassung: UserTask `assignee` muss die Supabase-User-ID tragen
+      (nicht Nickname) — die `validate-user`-WebSocket-Response kann benutzt werden
 
 ---
 

@@ -7,10 +7,11 @@ Mono-repo. Packages liegen unter `packages/`.
 | Package | Language | Status |
 |---|---|---|
 | `tavernup_domain` | Dart | ✅ Complete, all tests green |
-| `tavernup_auth_supabase` | Dart | 🔲 Neu anlegen |
-| `tavernup_repositories_supabase` | Dart | ✅ All 8 implementations done |
-| `tavernup_server` | Dart | ✅ Complete, all tests green |
-| `tavernup_client` | Flutter 3.41.6 / Dart 3.11.4 | 🔲 In Arbeit |
+| `tavernup_auth_supabase` | Dart | ✅ Phase 1 foundation |
+| `tavernup_repositories_supabase` | Dart | ✅ 8 repos + SupabaseSyncService |
+| `tavernup_process_camunda` | Dart | ✅ CamundaProcessEngine (Camunda 7 REST) |
+| `tavernup_server` | Dart | ✅ Complete, Camunda wired, all tests green |
+| `tavernup_client` | Flutter 3.41.6 / Dart 3.11.4 | 🔲 In Arbeit (Phase 2 done) |
 
 Flutter-Version per `fvm` im Repo gepinnt (siehe `.fvmrc`). Primäre Entwicklungsumgebung: Linux VM (Ubuntu 24.04 arm64).
 
@@ -21,11 +22,11 @@ Flutter-Version per `fvm` im Repo gepinnt (siehe `.fvmrc`). Primäre Entwicklung
 ### Supabase
 - Project: `tavernup`, EU Frankfurt
 - ID: `xrmwdfuqeaoredwnerau`
-- RLS + Policies active on all tables
-- Realtime active on `user_tasks`
+- RLS policies currently disabled (see Open Tasks — RBAC backlog)
+- Realtime active on all 9 domain tables (see `supabase/migrations/20260424120000_enable_realtime.sql`)
 - Server uses `service_role` key (bypasses RLS)
 - Start env: `export $(cat .env | xargs) && dart run bin/server.dart`
-- Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CAMUNDA_BASE_URL`
 
 ### Supabase Schema
 | Table | Notes |
@@ -38,7 +39,7 @@ Flutter-Version per `fvm` im Repo gepinnt (siehe `.fvmrc`). Primäre Entwicklung
 | `story_nodes` | |
 | `story_node_instances` | |
 | `sessions` | `participants` = jsonb array of AdventureCharacter (no own repo) |
-| `user_tasks` | `id` is `text` (Camunda task IDs); Realtime active |
+| `user_tasks` | `id` is `text` (Camunda task IDs) |
 
 > ⚠️ Known constraint: Camunda `ACT_` tables landed in `public` schema — Supabase pooler prevents schema-level isolation. Revisit when moving to dedicated DB for TeamUp.
 
@@ -99,12 +100,14 @@ means replacing one package, not touching server and client separately.
 - Client ↔ Server via **WebSocket** (requestId pattern for synchronous calls)
 - Camunda **TaskListener** (create-event) fires HTTP POST to
   `/webhook/task-created` for both UserTasks and ExternalTasks
-- UserTasks → stored in `user_tasks` (Supabase), then pushed via
-  WebSocket to the assigned client
-- ExternalTasks → triggers `fetchAndLock` in `EntityWorker`
-- Safety-net poll ~60s as fallback (no primary poll timer)
-- On WebSocket connect: server delivers all pending UserTasks for
-  the authenticated user
+- UserTasks → stored in `user_tasks` (Supabase); client watches that table
+  via Supabase Realtime filtered by `assignee = userId`
+- ExternalTasks → webhook triggers `WorkerRunner.runOnce()` which calls
+  `IProcessEngine.fetchAndLockWorkerTasks` and dispatches to `IWorker`s
+- Safety-net `Timer.periodic(60s)` in `server.dart` re-runs the worker
+  cycle to catch external tasks whose webhook was lost
+- UserTask completion: client → WebSocket (`complete-task`) → server →
+  `IProcessEngine.completeUserTask` → Camunda advances the process
 
 ### Realtime Abstraction
 - Layer 1: `IRealtimeTransport` — WebSocket transport to tavernup_server
@@ -154,7 +157,8 @@ Registry: `EntityRepositoryRegistry` in `tavernup_domain`
 
 Realtime interfaces: `IRealtimeTransport`, `IProcessEventService`, `ISyncService`
 
-Mock repositories: all present, including `MockUserTaskRepository`
+Mocks (in `tavernup_domain/lib/src/mock/`): all repositories,
+`MockRealtimeTransport`, `MockProcessEngine`.
 
 ---
 
@@ -162,10 +166,25 @@ Mock repositories: all present, including `MockUserTaskRepository`
 
 | Component | Status | Notes |
 |---|---|---|
-| `EntityWorker` | ✅ | Processes Camunda External Tasks via fetchAndLock |
+| `EntityWorker` | ✅ | Handles WorkerTasks via `IEntityRepository` registry (`invitation`, `membership`) |
+| `WorkerRunner` | ✅ | Ties `IProcessEngine.fetchAndLock` → `IWorker.execute` → complete/fail; serialized |
 | `WebSocketServer` | ✅ | Port 8080 |
-| `MessageHandler` | ✅ | `validate-user`, `complete-task` via requestId pattern |
+| `MessageHandler` | ✅ | `validate-user`, `complete-task` via requestId pattern; routes completions to Camunda |
 | `WebhookHandler` | ✅ | Receives Camunda webhook, routes userTask / externalTask |
+| Safety-net Timer | ✅ | `Timer.periodic(60s)` in `server.dart` → `workerRunner.runOnce()` |
+
+---
+
+## tavernup_process_camunda
+
+| Component | Status | Notes |
+|---|---|---|
+| `CamundaProcessEngine` | ✅ | REST adapter for `IProcessEngine` (`dio` over `/engine-rest`) |
+
+Variable mapping Camunda ↔ `Variable`: `String`↔`string`, `Integer/Long`↔`integer`,
+`Double/Float`↔`double`, `Boolean`↔`boolean`, `Json` (stringified)↔`json`.
+404 on specific resources → `ArgumentError`; other error responses → `StateError`
+with the server-provided message.
 
 ---
 
