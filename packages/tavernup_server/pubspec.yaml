@@ -11,6 +11,8 @@ dependencies:
     path: ../tavernup_domain
   tavernup_repositories_supabase:
     path: ../tavernup_repositories_supabase
+  tavernup_process_camunda:
+    path: ../tavernup_process_camunda
   shelf: ^1.4.0
   shelf_router: ^1.1.0
   shelf_web_socket: ^2.0.0

@@ -34,6 +34,7 @@ export 'src/mock/mock_story_node_instance_repository.dart';
 export 'src/mock/mock_session_repository.dart';
 export 'src/mock/mock_user_task_repository.dart';
 export 'src/mock/mock_realtime_transport.dart';
+export 'src/mock/mock_process_engine.dart';
 
 // ── Process ───────────────────────────────────────────────────────────────────
 export 'src/process/i_process_engine.dart';
