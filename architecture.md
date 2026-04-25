@@ -150,6 +150,32 @@ concrete role and permission catalog is a separate body of work and
 lives outside this document; the architecture only fixes the
 *mechanism*, not the rule contents.
 
+### Principal Model
+
+Every call into an RBA wrapper carries a `Principal`. There are exactly
+two variants:
+
+- `UserPrincipal(userId)` — the authenticated identity behind a client
+  request, established when a WebSocket connection completes auth.
+- `SystemPrincipal` — used by server-internal code paths that act on
+  behalf of the platform itself rather than any user: Camunda
+  `WorkerRunner`, webhook routing, and the server bootstrap that
+  populates the repository registry. Single instance,
+  `SystemPrincipal.instance`.
+
+`SystemPrincipal` is itself a guarded resource. There is no documented
+bypass around the RBA — `SystemPrincipal` does not bypass the wrappers,
+it flows _through_ them, and the wrappers see it explicitly. Its use
+is restricted to the small, named set of call sites above. Enforcement
+mirrors the rest of the RBA boundary: a custom analyzer rule
+(`custom_lint`) restricts where `SystemPrincipal.instance` may be
+referenced, and CODEOWNERS gates any change to those allowed sites.
+
+For wrappers the rule is simple: when the principal is
+`SystemPrincipal`, the wrapper delegates to the raw repository
+unfiltered. Every other principal goes through the full filter and
+projection logic.
+
 ### Form: Authorizing Repository Wrappers
 
 The RBA layer is **not** a separate service that other code queries
@@ -180,6 +206,25 @@ relationship to the target object and either executes or rejects.
 
 For realtime streams, the wrapper subscribes to the raw stream and
 applies the same filter/project logic to each event before forwarding.
+
+### Connection Authentication
+
+A WebSocket connection becomes useful only after authentication. The
+first frame after connect must be an `auth` frame carrying a Supabase
+Auth token; all other frames before successful auth are rejected.
+On success the server binds a `UserPrincipal` to the connection; on
+token expiry during the connection the server closes the socket and
+the client reconnects. Refresh frames are deliberately not part of
+the protocol at this stage — they can be added later without
+architectural change.
+
+Three DDoS mitigations are part of the authentication mechanism, not
+optional add-ons: an auth timeout per connection (closed if no auth
+frame arrives within a few seconds), a bounded `awaitingAuth` pool
+(authenticated connections are unaffected when it is full), and a
+per-IP rate limit on connect attempts. Together they neutralise the
+marginal structural disadvantage of auth-as-first-frame compared to
+auth-in-handshake.
 
 ### Structural Enforcement
 
@@ -232,6 +277,41 @@ Auth-related operations (login, token refresh, password reset) are
 unaffected — they target Supabase Auth endpoints, not the domain
 tables, and continue to work with the public `ANON_KEY` from the
 client.
+
+### Storage Access
+
+Some domain data (avatars, future attachments) lives in object storage
+rather than in the database. The RBA principle still holds: **every
+access decision is made in the RBA layer of the server**. Storage is
+treated as an opaque byte container that only honours short-lived,
+server-signed URLs; its own access policy is "deny all except signed
+requests" and it does not encode any domain-level permission.
+
+This is a deliberate choice over Storage RLS policies that would
+mirror RBA. Two sources of truth for the same authorisation decisions
+are an invariant violation waiting to happen — every rule change would
+need to be made twice and kept in sync. With server-signed URLs there
+is exactly one source of truth (the RBA wrapper); the signature is
+the receipt that the RBA said yes.
+
+In operation:
+
+- **Upload.** Client requests permission via WebSocket; the RBA
+  wrapper decides; on yes the server returns a short-lived signed
+  upload URL for a deterministic path; the client uploads bytes
+  directly to storage; the client reports completion and the server
+  records the path on the domain record through the same RBA wrapper.
+- **Download.** When a record is read through an RBA wrapper, the
+  wrapper decides whether the requester may see the attached asset.
+  If yes, the projection includes a freshly signed download URL in
+  place of the raw storage path. If no, the attachment field is
+  omitted from the projection.
+
+Bytes flow client ↔ storage directly, never through the WebSocket
+data channel. The server stays on the control path. Transport
+security (TLS) is assumed throughout. End-to-end encryption is out of
+scope for TavernUp and will be a separate concept for TeamUp
+(KMS/HSM territory).
 
 ### Realtime Abstraction
 - Layer 1: `IRealtimeTransport` — WebSocket transport to tavernup_server

@@ -40,37 +40,107 @@ Implement the target data access architecture described in
 through authorizing repository wrappers, no direct client-to-Supabase
 path.
 
-### Scope
+### Branching
+Work happens on a dedicated branch off `main`. Phase 1 deliberately
+makes the existing client non-functional — it must not land on `main`
+until Phase 6 restores client functionality through the new path.
 
-**Server side**
-- [ ] Re-enable RLS on all 9 domain tables with a single default-deny
-      policy (only `service_role` allowed). Auth tables remain
-      untouched. Prerequisite — without it, the migration is cosmetic.
-- [ ] Create RBA layer module in `tavernup_server` —
-      authorizing wrapper for each `IXxxRepository`
-- [ ] Move `service_role` Supabase client construction into the RBA
-      layer factory; remove all other access paths
-- [ ] Restrict `tavernup_repositories_supabase` public API to the
-      factory; raw repos in `lib/src/` only
-- [ ] Add custom lint rule forbidding cross-package `src/` imports
-      from outside the RBA layer
-- [ ] Add CODEOWNERS for the RBA layer and the raw repos package
-- [ ] Extend WebSocket protocol to carry repository requests
-      (read, write, stream subscribe/unsubscribe)
-- [ ] Route incoming repository requests through the RBA wrappers
-- [ ] Server-side stream multiplexing: subscribe to Supabase Realtime
-      once per stream, apply per-user filtering, fan out to clients
-      over WebSocket
+### Phase 1 — RLS default-deny + smoke-test (forcing function)
+- [ ] Migration: enable RLS on all 9 domain tables with a single
+      `service_role only` policy. ANON and `authenticated` roles
+      blocked. Auth tables untouched.
+- [ ] Smoke-test: the existing client's direct-Supabase data path
+      must fail after this migration. That failure is the positive
+      proof that the safety net works; the next phases lift the
+      client back to functional state via the new path.
 
-**Client side**
-- [ ] Create `tavernup_repositories_remote` package — implements
-      `IXxxRepository` interfaces by sending WebSocket requests
-- [ ] Migrate `SupabaseSyncService` consumption to the new
-      WebSocket-based stream subscription
-- [ ] Remove `tavernup_repositories_supabase` and any direct Supabase
-      client from client dependencies
-- [ ] Verify the client `pubspec.yaml` cannot resolve a Supabase data
-      client (only the auth client remains)
+### Phase 2 — Server structures (no behaviour change)
+- [ ] `Principal` model in `tavernup_server/lib/src/rba/principal.dart`
+      (`UserPrincipal(userId)`, `SystemPrincipal.instance`).
+- [ ] `custom_lint` rule restricting where
+      `SystemPrincipal.instance` may be referenced.
+- [ ] Restrict `tavernup_repositories_supabase` public API to a
+      factory; raw repos remain in `lib/src/`.
+- [ ] `custom_lint` rule forbidding
+      `package:tavernup_repositories_supabase/src/...` imports outside
+      the RBA module.
+- [ ] CODEOWNERS for the RBA module, the raw repositories package,
+      and the allowed `SystemPrincipal.instance` call sites.
+- [ ] RBA wrapper skeletons (one per `IXxxRepository`), accepting
+      `Principal` in the constructor; first iteration is pass-through
+      with placeholder filter/project logic.
+- [ ] `service_role` Supabase client construction moved into the RBA
+      factory; no other access path remains in the server.
+- [ ] `EntityRepositoryRegistry` populated with RBA wrappers using
+      `SystemPrincipal.instance`.
+- [ ] Existing 299 server/domain tests stay green (verifies no
+      behaviour change).
+
+### Phase 3 — Connection authentication + DDoS mitigations
+- [ ] Auth-frame protocol: first frame after WebSocket connect must
+      be an `auth` frame with a Supabase Auth token; everything else
+      is rejected before successful auth.
+- [ ] Token validation against Supabase Auth; prefer local public-key
+      validation if supported.
+- [ ] Connection state holds `principal: Principal?`, transitions to
+      `UserPrincipal(userId)` on success.
+- [ ] Token expiry mid-connection: server closes the connection;
+      client reconnects.
+- [ ] DDoS mitigations (mandatory, part of the auth mechanism):
+      - Auth timeout per connection (close after a few seconds without
+        auth frame).
+      - Bounded `awaitingAuth` pool (reject new connects when full;
+        authenticated connections unaffected).
+      - Per-IP rate limit on connect attempts.
+- [ ] `MessageHandler.validate-user` and `complete-task` use the
+      connection's `UserPrincipal` to construct the right RBA wrappers.
+
+### Phase 4 — Repository request routing over WebSocket
+- [ ] Wire-protocol extension: `repo.<repoName>.<method>` request
+      type with serialised arguments.
+- [ ] Dispatcher in `MessageHandler`: looks up the RBA wrapper for
+      the connection's principal, calls the requested method,
+      serialises the result.
+- [ ] Synchronous read and write methods first; streams in Phase 5.
+
+### Phase 5 — Stream multiplexing (largest single phase)
+- [ ] `SubscriptionManager` in the server with reference-counted
+      upstream subscriptions to Supabase Realtime.
+- [ ] Per-principal filter/project applied in the RBA wrapper to
+      every event before fan-out.
+- [ ] Client frames `subscribe` / `unsubscribe` with stream-id;
+      server frames `stream-event` with stream-id and payload.
+- [ ] Connection close releases all of its subscriptions; last
+      unsubscribe tears down the upstream subscription.
+
+### Phase 6 — Client migration
+- [ ] New package `tavernup_repositories_remote` —
+      `IXxxRepository` implementations that send WebSocket requests;
+      stream methods (`watchById`, `watchWhere`, `watchForAssignee`)
+      implemented as WebSocket `subscribe` calls.
+- [ ] Avatar upload migrated to the signed-URL flow:
+      client requests permission → RBA decides → server returns a
+      short-lived signed upload URL → client uploads to Storage
+      directly → client reports completion → server records the path
+      on the user record through the RBA wrapper.
+- [ ] Avatar download integrated into the User read projection:
+      RBA wrapper substitutes the storage path with a freshly signed
+      download URL when the requester may see it; otherwise the
+      field is omitted.
+- [ ] Client `pubspec.yaml`: remove `tavernup_repositories_supabase`;
+      `supabase_flutter` remains only as transitive dep of
+      `tavernup_auth_supabase`.
+- [ ] Client `main.dart`: provider overrides on Remote repos.
+- [ ] `SupabaseSyncService` no longer used from the client.
+
+### Phase 7 — Constraint confirmation + merge back
+- [ ] CI check: `tavernup_client/pubspec.yaml` cannot list
+      `tavernup_repositories_supabase`.
+- [ ] All `custom_lint` rules at error severity; remaining violations
+      resolved.
+- [ ] Smoke-tests: client login, one read over WebSocket, one write,
+      one stream emission.
+- [ ] Branch merges back to `main`.
 
 ### Concrete role/permission catalog
 Tracked separately. Architecture only fixes the mechanism. The role
