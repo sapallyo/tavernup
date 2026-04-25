@@ -15,6 +15,12 @@ Mono-repo. Packages liegen unter `packages/`.
 
 Flutter-Version per `fvm` im Repo gepinnt (siehe `.fvmrc`). Primäre Entwicklungsumgebung: Linux VM (Ubuntu 24.04 arm64).
 
+> ⚠️ The Data Access model and Authorization Layer described below
+> represent the **target architecture**. Phase 2 was implemented against
+> the previous BaaS model (client → Supabase direct). Migrating
+> `SupabaseSyncService` to server-mediated streams is tracked in
+> `open_tasks.md`.
+
 ---
 
 ## Infrastructure
@@ -22,9 +28,11 @@ Flutter-Version per `fvm` im Repo gepinnt (siehe `.fvmrc`). Primäre Entwicklung
 ### Supabase
 - Project: `tavernup`, EU Frankfurt
 - ID: `xrmwdfuqeaoredwnerau`
-- RLS policies currently disabled (see Open Tasks — RBAC backlog)
+- RLS policies disabled — authorization happens entirely in the server's
+  RBA layer (see Authorization Layer section). Supabase is treated as a
+  pure persistence backend.
 - Realtime active on all 9 domain tables (see `supabase/migrations/20260424120000_enable_realtime.sql`)
-- Server uses `service_role` key (bypasses RLS)
+- `service_role` key lives **only** in `tavernup_server` (in the RBA layer)
 - Start env: `export $(cat .env | xargs) && dart run bin/server.dart`
 - Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CAMUNDA_BASE_URL`
 
@@ -51,71 +59,156 @@ Flutter-Version per `fvm` im Repo gepinnt (siehe `.fvmrc`). Primäre Entwicklung
 
 ## Architecture Layers
 
-```
 tavernup_client (Flutter)
-│  WebSocket (requestId pattern) — Process-Events + fachliche Aktionen
-│  Supabase direkt — Reads + einfache Preference-Writes
+│  WebSocket only — all reads, writes, streams, and process events
 tavernup_server (Dart)
-│  fetchAndLock (External Tasks)
-│  Webhook receiver (/webhook/task-created)
-│  UserTask push → WebSocket → Client
+│  Authorization Layer (RBA)
+│    └─ Authorizing repository wrappers (the only path to data)
+│    └─ Stream filtering and projection
+│  MessageHandler / WebhookHandler / WorkerRunner
+│  Supabase repositories (raw, service_role, restricted access)
+│  Camunda integration (fetchAndLock, complete-task)
 Camunda 7
 │  PostgreSQL tables (ACT_*)
 Supabase (PostgreSQL + Realtime)
-```
 
 ### Client–Server Responsibility Split
 
 **Client** is responsible for UI rendering, navigation, local UI state,
-and basic UX validation (e.g. required fields).
+and basic UX validation (e.g. required fields). The client never speaks
+to Supabase directly — it only knows the WebSocket protocol to the server.
 
-**Server** is responsible for all business logic, authorization checks,
-and orchestration via Camunda. Multiple client platforms (web, tablet,
-mobile) share the same server-side logic — no duplication across clients.
+**Server** is responsible for all business logic, **all authorization
+decisions**, and orchestration via Camunda. The server is the single
+trusted gateway to all persistent data. Multiple client platforms (web,
+tablet, mobile) share the same server-side logic — no duplication across
+clients.
 
 ### Data Access Principles
 
-- **Reads** — always direct via `tavernup_repositories_supabase` interfaces.
-  No server roundtrip for read operations.
-- **Preference writes** — direct via repository (nickname, avatar, UI settings).
-  No business logic involved, no server needed.
-- **Business writes** — via WebSocket to server, decided case-by-case.
-  Applies when validation, authorization, or process triggers are involved
-  (e.g. creating a group, assigning a character to a session).
-- **Process events** — always via WebSocket (UserTask push, complete-task).
+All access to domain data — reads, writes, and realtime streams — flows
+through `tavernup_server`. The client has no Supabase credentials and
+no direct path to the database. Supabase is an implementation detail of
+the server's persistence layer.
 
-This is a deliberate pragmatic split, not a strict rule. The decision is
-made per feature. The interface boundaries ensure the split can evolve
-without rearchitecting.
+This is a deliberate departure from the BaaS model. The reasoning:
 
-### Shared Repository Layer
+- **Authorization must be unbypassable.** The only way to guarantee that
+  every data access is checked is to route every access through code we
+  control. Direct client-to-database paths cannot be retrofitted with
+  authorization without re-introducing the same problem.
+- **§203 StGB and TeamUp.** The platform that TavernUp prepares for
+  cannot expose unfiltered database streams to clients. Building TavernUp
+  the same way means the architecture transfers without rework.
+- **Replaceability becomes real.** With the client unaware of Supabase,
+  swapping the backend for ISO 27001-compliant German hosting affects
+  exactly one package (`tavernup_repositories_supabase`), not the client.
 
-`tavernup_repositories_supabase` is used by both server and client —
-it is the single implementation of all domain repository interfaces.
-Neither server nor client has its own data access code.
-Replacing Supabase (e.g. for TeamUp's German hosting requirements)
-means replacing one package, not touching server and client separately.
+The cost — every read incurs a server hop — is acceptable for the
+expected concurrency and is the right trade-off for the security
+posture.
 
 ### Communication Flow
-- Client ↔ Server via **WebSocket** (requestId pattern for synchronous calls)
-- Camunda **TaskListener** (create-event) fires HTTP POST to
-  `/webhook/task-created` for both UserTasks and ExternalTasks
-- UserTasks → stored in `user_tasks` (Supabase); client watches that table
-  via Supabase Realtime filtered by `assignee = userId`
-- ExternalTasks → webhook triggers `WorkerRunner.runOnce()` which calls
-  `IProcessEngine.fetchAndLockWorkerTasks` and dispatches to `IWorker`s
-- Safety-net `Timer.periodic(60s)` in `server.dart` re-runs the worker
-  cycle to catch external tasks whose webhook was lost
-- UserTask completion: client → WebSocket (`complete-task`) → server →
-  `IProcessEngine.completeUserTask` → Camunda advances the process
+
+- **All client → server traffic** runs over WebSocket using the
+  `requestId` pattern for synchronous request/response correlation.
+- **Reads** — client sends a repository request, server's RBA layer
+  loads from Supabase, filters and projects, returns the result.
+- **Writes** — client sends a write request, server's RBA layer checks
+  the operation and either executes it or rejects it.
+- **Realtime streams** — server subscribes to Supabase Realtime, applies
+  per-user filtering and projection in the RBA layer, and forwards the
+  authorized stream to the client over WebSocket.
+- **Process events** — Camunda TaskListener (create-event) fires
+  HTTP POST to `/webhook/task-created` for both UserTasks and
+  ExternalTasks. UserTasks are pushed to the assigned client over
+  WebSocket; ExternalTasks trigger `WorkerRunner.runOnce()`.
+- **Safety-net** — `Timer.periodic(60s)` in `server.dart` re-runs the
+  worker cycle to catch external tasks whose webhook was lost.
+
+---
+
+## Authorization Layer (RBA)
+
+The RBA layer is the structural first layer of the server. Every access
+to domain data passes through it. There is no path around it.
+
+### Default-Deny
+
+Authorization is relationship-based. Access is granted only when an
+explicit relationship between the authenticated user and the target
+object permits it. There are no global roles and no implicit access:
+if no rule grants access, access is denied.
+
+Roles are **contextual** — they describe a relationship between a user
+and a domain object (e.g. "member of group X", "game master of session
+Y", "owner of character Z"), not a global property of the user. The
+concrete role and permission catalog is a separate body of work and
+lives outside this document; the architecture only fixes the
+*mechanism*, not the rule contents.
+
+### Form: Authorizing Repository Wrappers
+
+The RBA layer is **not** a separate service that other code queries
+("may user X do Y?"). Querying invites bypass — any caller might forget
+to ask. Instead, the RBA layer **is** the implementation of the domain
+repository interfaces that the rest of the server code uses.
+
+For every `IXxxRepository` interface in `tavernup_domain`, there are
+two implementations:
+
+- A **raw** implementation in `tavernup_repositories_supabase` that
+  talks to Supabase with the `service_role` key. No authorization logic.
+- An **authorizing wrapper** in the server's RBA layer that delegates
+  to the raw implementation, applying access checks on writes and
+  filtering plus projection on reads.
+
+The server code (`MessageHandler`, `WorkerRunner`, etc.) only ever sees
+the authorizing wrappers. The raw implementations are not visible
+outside the RBA layer.
+
+For reads, the wrapper:
+- decides which records the user may see at all (filtering),
+- decides which fields and which level of detail of each record the
+  user may see (projection).
+
+For writes, the wrapper checks the operation against the user's
+relationship to the target object and either executes or rejects.
+
+For realtime streams, the wrapper subscribes to the raw stream and
+applies the same filter/project logic to each event before forwarding.
+
+### Structural Enforcement
+
+The unbypassability of the RBA layer rests on three mechanisms,
+combined:
+
+- **Package boundary.** `tavernup_repositories_supabase` exports only a
+  factory that produces authorizing wrappers. Raw repository classes
+  remain in `lib/src/` and are not part of the public API.
+- **Lint rules.** A custom analyzer rule forbids imports of
+  `package:tavernup_repositories_supabase/src/...` from anywhere other
+  than the RBA layer module. Violations break the build.
+- **CODEOWNERS.** The RBA layer module and the raw repository package
+  require review by a designated owner group for any change. Routine
+  application work cannot modify them without explicit review.
+- **Credential isolation.** The `service_role` key is read from the
+  environment exclusively by the RBA layer's factory. No other code
+  has a path to it.
+
+In Dart these mechanisms are conventions enforced by tooling rather
+than by the language itself. The TeamUp Java/Quarkus stack will be
+able to express the same boundary as a Java module with explicit
+exports — strengthening the guarantee at the language level without
+changing the architecture.
 
 ### Realtime Abstraction
 - Layer 1: `IRealtimeTransport` — WebSocket transport to tavernup_server
 - Layer 2: `IProcessEventService` — UserTask push + completion via WebSocket
-- Layer 3: `ISyncService` — domain data streams via Supabase directly
-- Supabase is encapsulated in `tavernup_repositories_supabase` →
-  swappable for TeamUp without touching client or server code
-  
+- Layer 3: `ISyncService` — domain data streams; on the server the streams
+  originate from Supabase Realtime and are filtered/projected by the RBA
+  layer; the client consumes them via WebSocket without knowing the source.
+
 ---
 
 ## Domain Models (`tavernup_domain`)
@@ -162,6 +255,23 @@ Mocks (in `tavernup_domain/lib/src/mock/`): all repositories,
 
 ---
 
+## Shared Repository Layer
+
+`tavernup_repositories_supabase` is a **server-only** package. It
+contains the raw repository implementations and the `service_role`-based
+Supabase client. The Flutter client does not depend on this package.
+
+The client gets its repository implementations from a separate package
+(working name `tavernup_repositories_remote`) whose implementations
+serialize each call as a WebSocket request to the server. The server
+then routes the request through the RBA layer.
+
+This split is what makes the data flow constraint enforceable: the
+client physically cannot reach Supabase because it has no code that
+can.
+
+---
+
 ## tavernup_server
 
 | Component | Status | Notes |
@@ -172,6 +282,8 @@ Mocks (in `tavernup_domain/lib/src/mock/`): all repositories,
 | `MessageHandler` | ✅ | `validate-user`, `complete-task` via requestId pattern; routes completions to Camunda |
 | `WebhookHandler` | ✅ | Receives Camunda webhook, routes userTask / externalTask |
 | Safety-net Timer | ✅ | `Timer.periodic(60s)` in `server.dart` → `workerRunner.runOnce()` |
+| RBA Layer | 🔲 | To be implemented (see open_tasks.md) |
+| Repository request router | 🔲 | Routes WebSocket repository calls into RBA wrappers |
 
 ---
 
@@ -190,15 +302,13 @@ with the server-provided message.
 
 ## BPMN: Invitation Process
 
-```
 Start({groupId, invitedBy})
-  → UserTask: choose-user          (output: nickname)
-  → WorkerTask: entity-operation   (validate → create-invitation)
-  → UserTask: accept-invitation    (output: accepted)
-  → Gateway
-  → WorkerTask: entity-operation   (create-membership)
-  → End
-```
+→ UserTask: choose-user          (output: nickname)
+→ WorkerTask: entity-operation   (validate → create-invitation)
+→ UserTask: accept-invitation    (output: accepted)
+→ Gateway
+→ WorkerTask: entity-operation   (create-membership)
+→ End
 
 > `validate-user` is a WebSocket endpoint on the server, not a BPMN step.
 
@@ -215,3 +325,9 @@ All backend services and infrastructure are abstracted behind interfaces. This e
 TavernUp is the POC for **TeamUp** — an orchestration platform for school assistance coordination in the German social sector.
 
 TeamUp requirements: ISO 27001 German hosting, BSI TR-03161, §203 StGB, no US SaaS, offline capability, RBAC. Stack: similar (Camunda/Flowable, BPMN).
+
+> Note: NSCs (non-player characters) are not covered by the relationship-based
+> authorization model as currently outlined. NSC visibility is a game master
+> decision (controlled, per-session reveals) rather than a structural property
+> of the user-object relationship. The RBA model needs to be revisited before
+> NSC features are implemented.

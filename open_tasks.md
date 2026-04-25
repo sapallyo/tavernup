@@ -3,8 +3,9 @@
 ## Priority Order
 
 1. ~~**Camunda Docker Image**~~ ✅ Done
-2. **Flutter Client** (Final layer)
-3. ~~**Integration Tests** (Supabase repositories)~~ ✅ Done
+2. **Authorization Layer (RBA) + Data Flow Migration**
+3. **Flutter Client** (Final layer)
+4. ~~**Integration Tests** (Supabase repositories)~~ ✅ Done
 
 ---
 
@@ -27,7 +28,56 @@ Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp serve
 
 ---
 
-## 2. Flutter Client
+## 2. Authorization Layer (RBA) + Data Flow Migration
+
+**Status**: 🔲 Not started  
+**Depends on**: nothing (can start immediately)  
+**Blocks**: Flutter client work past current Phase 2 state
+
+### Goal
+Implement the target data access architecture described in
+`architecture.md` — all client traffic over WebSocket, all data access
+through authorizing repository wrappers, no direct client-to-Supabase
+path.
+
+### Scope
+
+**Server side**
+- [ ] Create RBA layer module in `tavernup_server` —
+      authorizing wrapper for each `IXxxRepository`
+- [ ] Move `service_role` Supabase client construction into the RBA
+      layer factory; remove all other access paths
+- [ ] Restrict `tavernup_repositories_supabase` public API to the
+      factory; raw repos in `lib/src/` only
+- [ ] Add custom lint rule forbidding cross-package `src/` imports
+      from outside the RBA layer
+- [ ] Add CODEOWNERS for the RBA layer and the raw repos package
+- [ ] Extend WebSocket protocol to carry repository requests
+      (read, write, stream subscribe/unsubscribe)
+- [ ] Route incoming repository requests through the RBA wrappers
+- [ ] Server-side stream multiplexing: subscribe to Supabase Realtime
+      once per stream, apply per-user filtering, fan out to clients
+      over WebSocket
+
+**Client side**
+- [ ] Create `tavernup_repositories_remote` package — implements
+      `IXxxRepository` interfaces by sending WebSocket requests
+- [ ] Migrate `SupabaseSyncService` consumption to the new
+      WebSocket-based stream subscription
+- [ ] Remove `tavernup_repositories_supabase` and any direct Supabase
+      client from client dependencies
+- [ ] Verify the client `pubspec.yaml` cannot resolve a Supabase data
+      client (only the auth client remains)
+
+### Concrete role/permission catalog
+Tracked separately. Architecture only fixes the mechanism. The role
+catalog (member rights: Spieler / SL / Admin; per-session roles
+gameMaster / player; character ownership; obvious-vs-detailed
+projections; NSC handling) is filled in as features are implemented.
+
+---
+
+## 3. Flutter Client
 
 **Status**: 🔲 In Arbeit  
 **Depends on**: ~~Task 1 (Camunda webhook)~~ ✅ resolved
@@ -79,7 +129,7 @@ Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp serve
 
 ---
 
-## 3. Integration Tests – Supabase Repositories
+## 4. Integration Tests – Supabase Repositories
 
 **Status**: ✅ Done  
 **Package**: `tavernup_repositories_supabase`
