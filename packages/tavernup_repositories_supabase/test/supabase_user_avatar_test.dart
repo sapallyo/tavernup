@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:supabase/supabase.dart';
-import 'package:tavernup_repositories_supabase/tavernup_repositories_supabase.dart';
+import 'package:tavernup_repositories_supabase/src/supabase_user_repository.dart';
 import 'package:test/test.dart';
 
 import 'test_client.dart';

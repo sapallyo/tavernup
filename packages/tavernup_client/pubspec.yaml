@@ -36,8 +36,8 @@ dependencies:
     path: ../tavernup_domain
   tavernup_auth_supabase:
     path: ../tavernup_auth_supabase
-  tavernup_repositories_supabase:
-    path: ../tavernup_repositories_supabase
+  tavernup_repositories_remote:
+    path: ../tavernup_repositories_remote
   flutter_riverpod: ^2.6.0
   go_router: ^14.6.0
   supabase_flutter: ^2.0.0

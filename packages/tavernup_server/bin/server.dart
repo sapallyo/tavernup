@@ -4,13 +4,17 @@ import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
-import 'package:supabase/supabase.dart';
 import 'package:tavernup_domain/tavernup_domain.dart';
 import 'package:tavernup_process_camunda/tavernup_process_camunda.dart';
-import 'package:tavernup_repositories_supabase/tavernup_repositories_supabase.dart';
 
+import 'package:tavernup_server/src/rba/principal.dart';
+import 'package:tavernup_server/src/rba/rba_factory.dart';
 import 'package:tavernup_server/src/webhook/webhook_handler.dart';
+import 'package:tavernup_server/src/websocket/auth_token_validator.dart';
+import 'package:tavernup_server/src/websocket/connection_manager.dart';
+import 'package:tavernup_server/src/websocket/ip_rate_limit_middleware.dart';
 import 'package:tavernup_server/src/websocket/message_handler.dart';
+import 'package:tavernup_server/src/websocket/subscription_manager.dart';
 import 'package:tavernup_server/src/websocket/websocket_server.dart';
 import 'package:tavernup_server/src/workers/entity_worker.dart';
 import 'package:tavernup_server/src/workers/worker_runner.dart';
@@ -21,21 +25,24 @@ const _safetyNetInterval = Duration(seconds: 60);
 void main() async {
   final supabaseUrl = Platform.environment['SUPABASE_URL'] ??
       (throw Exception('SUPABASE_URL not set'));
-  final supabaseKey = Platform.environment['SUPABASE_SERVICE_ROLE_KEY'] ??
+  final serviceRoleKey = Platform.environment['SUPABASE_SERVICE_ROLE_KEY'] ??
       (throw Exception('SUPABASE_SERVICE_ROLE_KEY not set'));
   final camundaBaseUrl = Platform.environment['CAMUNDA_BASE_URL'] ??
       (throw Exception('CAMUNDA_BASE_URL not set'));
 
-  final supabase = SupabaseClient(supabaseUrl, supabaseKey);
+  final rba = RbaFactory.fromEnvironment(
+    supabaseUrl: supabaseUrl,
+    serviceRoleKey: serviceRoleKey,
+  );
 
-  final userRepository = SupabaseUserRepository(supabase);
-  final userTaskRepository = SupabaseUserTaskRepository(supabase);
-  final invitationRepository = SupabaseInvitationRepository(supabase);
-  final gameGroupRepository = SupabaseGameGroupRepository(supabase);
+  // System-bootstrap repositories: registry population, webhook routing,
+  // worker dispatch. Per-connection user repositories come from the
+  // ConnectionManager once each socket finishes auth.
+  final systemRepos = rba.forPrincipal(SystemPrincipal.instance);
 
   final registry = EntityRepositoryRegistry()
-    ..register(invitationRepository)
-    ..register(gameGroupRepository);
+    ..register(systemRepos.invitation)
+    ..register(systemRepos.gameGroup);
 
   final camunda = CamundaProcessEngine(baseUrl: camundaBaseUrl);
 
@@ -47,29 +54,42 @@ void main() async {
   );
 
   final messageHandler = MessageHandler(
-    userRepository: userRepository,
-    userTaskRepository: userTaskRepository,
     completeUserTask: (taskId, variables) => camunda.completeUserTask(
       taskId: taskId,
       variables: variables,
     ),
   );
 
-  final wsServer = WebSocketServer(messageHandler);
+  final subscriptionManager = SubscriptionManager(rba);
+
+  final connectionManager = ConnectionManager(
+    validator: SupabaseAuthTokenValidator(
+      supabaseUrl: supabaseUrl,
+      apiKey: serviceRoleKey,
+    ),
+    rba: rba,
+    messageHandler: messageHandler,
+    subscriptions: subscriptionManager,
+  );
+
+  final wsServer = WebSocketServer(connectionManager);
 
   final webhookHandler = WebhookHandler(
-    userTaskRepository: userTaskRepository,
+    userTaskRepository: systemRepos.userTask,
     onExternalTaskCreated: () => unawaited(workerRunner.runOnce()),
   );
 
-  // Safety-net: catch external tasks whose webhook was missed.
   Timer.periodic(
     _safetyNetInterval,
     (_) => unawaited(workerRunner.runOnce()),
   );
 
+  final wsHandler = const Pipeline()
+      .addMiddleware(ipConnectRateLimit())
+      .addHandler(wsServer.handler);
+
   final router = Router()
-    ..get('/ws', wsServer.handler)
+    ..get('/ws', wsHandler)
     ..post('/webhook/task-created', webhookHandler.handleTaskCreated);
 
   final handler =
@@ -80,4 +100,5 @@ void main() async {
   print('Server running on port ${server.port}');
   print('Camunda engine: $camundaBaseUrl');
   print('Safety-net interval: ${_safetyNetInterval.inSeconds}s');
+  print('Awaiting-auth pool size: $kDefaultAwaitingAuthLimit');
 }

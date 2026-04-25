@@ -3,7 +3,7 @@
 ## Priority Order
 
 1. ~~**Camunda Docker Image**~~ ✅ Done
-2. **Authorization Layer (RBA) + Data Flow Migration**
+2. ~~**Authorization Layer (RBA) + Data Flow Migration**~~ ✅ Done (all 7 phases)
 3. **Flutter Client** (Final layer)
 4. ~~**Integration Tests** (Supabase repositories)~~ ✅ Done
 
@@ -30,9 +30,12 @@ Custom Camunda 7.21.0 Docker image that fires an HTTP POST to the TavernUp serve
 
 ## 2. Authorization Layer (RBA) + Data Flow Migration
 
-**Status**: 🔲 Not started  
-**Depends on**: nothing (can start immediately)  
-**Blocks**: Flutter client work past current Phase 2 state
+**Status**: ✅ Done — all 7 phases merged to `main`. Work happened on
+the `rba-migration` branch; the structural data path is now exclusively
+client → WebSocket → server → RBA → Supabase, with RLS as a default-
+deny safety net at the database. Avatar bytes go through signed
+Storage URLs; the client cannot resolve a Supabase data SDK
+(enforced by `scripts/check_client_isolation.sh`).
 
 ### Goal
 Implement the target data access architecture described in
@@ -45,102 +48,79 @@ Work happens on a dedicated branch off `main`. Phase 1 deliberately
 makes the existing client non-functional — it must not land on `main`
 until Phase 6 restores client functionality through the new path.
 
-### Phase 1 — RLS default-deny + smoke-test (forcing function)
-- [ ] Migration: enable RLS on all 9 domain tables with a single
-      `service_role only` policy. ANON and `authenticated` roles
-      blocked. Auth tables untouched.
-- [ ] Smoke-test: the existing client's direct-Supabase data path
-      must fail after this migration. That failure is the positive
-      proof that the safety net works; the next phases lift the
-      client back to functional state via the new path.
+### Phase 1 — RLS default-deny + smoke-test (forcing function) ✅
+- [x] Migration: RLS on all 9 domain tables with `service_role`-only
+      policy; auth tables untouched.
+- [x] Smoke-test: ANON-key path returns empty for every domain table
+      (`packages/tavernup_repositories_supabase/test/rls_safety_net_test.dart`).
 
-### Phase 2 — Server structures (no behaviour change)
-- [ ] `Principal` model in `tavernup_server/lib/src/rba/principal.dart`
-      (`UserPrincipal(userId)`, `SystemPrincipal.instance`).
-- [ ] `custom_lint` rule restricting where
-      `SystemPrincipal.instance` may be referenced.
-- [ ] Restrict `tavernup_repositories_supabase` public API to a
-      factory; raw repos remain in `lib/src/`.
-- [ ] `custom_lint` rule forbidding
-      `package:tavernup_repositories_supabase/src/...` imports outside
-      the RBA module.
-- [ ] CODEOWNERS for the RBA module, the raw repositories package,
-      and the allowed `SystemPrincipal.instance` call sites.
-- [ ] RBA wrapper skeletons (one per `IXxxRepository`), accepting
-      `Principal` in the constructor; first iteration is pass-through
-      with placeholder filter/project logic.
-- [ ] `service_role` Supabase client construction moved into the RBA
-      factory; no other access path remains in the server.
-- [ ] `EntityRepositoryRegistry` populated with RBA wrappers using
+### Phase 2 — Server structures (no behaviour change) ✅
+- [x] `Principal` model with `UserPrincipal` and a const-singleton
       `SystemPrincipal.instance`.
-- [ ] Existing 299 server/domain tests stay green (verifies no
-      behaviour change).
+- [x] `custom_lint` rule `rba_system_principal_restricted`.
+- [x] `tavernup_repositories_supabase` public API restricted to
+      `createRawRepositoryBundle` / `RawRepositoryBundle`.
+- [x] `custom_lint` rule `rba_no_raw_repository_import`.
+- [x] CODEOWNERS for RBA, raw repos, and allowed system call sites.
+- [x] 8 wrapper skeletons in `tavernup_server/lib/src/rba/wrappers/`.
+- [x] `service_role` Supabase client construction moved into
+      `RbaFactory.fromEnvironment`.
+- [x] `EntityRepositoryRegistry` populated under
+      `SystemPrincipal.instance`.
+- [x] All existing tests stay green.
 
-### Phase 3 — Connection authentication + DDoS mitigations
-- [ ] Auth-frame protocol: first frame after WebSocket connect must
-      be an `auth` frame with a Supabase Auth token; everything else
-      is rejected before successful auth.
-- [ ] Token validation against Supabase Auth; prefer local public-key
-      validation if supported.
-- [ ] Connection state holds `principal: Principal?`, transitions to
-      `UserPrincipal(userId)` on success.
-- [ ] Token expiry mid-connection: server closes the connection;
-      client reconnects.
-- [ ] DDoS mitigations (mandatory, part of the auth mechanism):
-      - Auth timeout per connection (close after a few seconds without
-        auth frame).
-      - Bounded `awaitingAuth` pool (reject new connects when full;
-        authenticated connections unaffected).
-      - Per-IP rate limit on connect attempts.
-- [ ] `MessageHandler.validate-user` and `complete-task` use the
-      connection's `UserPrincipal` to construct the right RBA wrappers.
+### Phase 3 — Connection authentication + DDoS mitigations ✅
+- [x] Auth-frame protocol — first frame must be `auth`.
+- [x] Token validation via Supabase `/auth/v1/user`.
+- [x] Connection state holds `Principal?`, set on success.
+- [x] Token expiry → server closes; client reconnects.
+- [x] DDoS mitigations:
+      auth timeout per connection,
+      bounded `awaitingAuth` pool,
+      per-IP rate limit on connect (sliding window middleware).
+- [x] `MessageHandler` operations use the connection's principal.
 
-### Phase 4 — Repository request routing over WebSocket
-- [ ] Wire-protocol extension: `repo.<repoName>.<method>` request
-      type with serialised arguments.
-- [ ] Dispatcher in `MessageHandler`: looks up the RBA wrapper for
-      the connection's principal, calls the requested method,
-      serialises the result.
-- [ ] Synchronous read and write methods first; streams in Phase 5.
+### Phase 4 — Repository request routing over WebSocket ✅
+- [x] Wire-protocol `repo.<repoName>.<method>` with named-arg payload.
+- [x] `RepoDispatcher` covers ~45 non-stream methods across all 8
+      interfaces; tuple flatten, enum encoding, void→null.
+- [x] Stream methods explicitly rejected with Phase-5 hint.
 
-### Phase 5 — Stream multiplexing (largest single phase)
-- [ ] `SubscriptionManager` in the server with reference-counted
-      upstream subscriptions to Supabase Realtime.
-- [ ] Per-principal filter/project applied in the RBA wrapper to
-      every event before fan-out.
-- [ ] Client frames `subscribe` / `unsubscribe` with stream-id;
-      server frames `stream-event` with stream-id and payload.
-- [ ] Connection close releases all of its subscriptions; last
-      unsubscribe tears down the upstream subscription.
+### Phase 5 — Stream multiplexing ✅
+- [x] `SubscriptionManager` keyed by
+      `(principal, repoName, method, args)` with ref-counted upstreams.
+- [x] Per-principal filter/project happens in the wrapper that owns
+      the upstream — different principals get independent upstreams.
+- [x] Wire frames `stream-subscribe` / `stream-unsubscribe` /
+      `stream-event` / `stream-error` / `stream-done`.
+- [x] Connection close releases all of its subscriptions.
 
-### Phase 6 — Client migration
-- [ ] New package `tavernup_repositories_remote` —
-      `IXxxRepository` implementations that send WebSocket requests;
-      stream methods (`watchById`, `watchWhere`, `watchForAssignee`)
-      implemented as WebSocket `subscribe` calls.
-- [ ] Avatar upload migrated to the signed-URL flow:
-      client requests permission → RBA decides → server returns a
-      short-lived signed upload URL → client uploads to Storage
-      directly → client reports completion → server records the path
-      on the user record through the RBA wrapper.
-- [ ] Avatar download integrated into the User read projection:
-      RBA wrapper substitutes the storage path with a freshly signed
-      download URL when the requester may see it; otherwise the
-      field is omitted.
-- [ ] Client `pubspec.yaml`: remove `tavernup_repositories_supabase`;
-      `supabase_flutter` remains only as transitive dep of
-      `tavernup_auth_supabase`.
-- [ ] Client `main.dart`: provider overrides on Remote repos.
-- [ ] `SupabaseSyncService` no longer used from the client.
+### Phase 6 — Client migration ✅
+- [x] New package `tavernup_repositories_remote` with 8 remote
+      implementations + `RemoteRepositoryBundle` factory.
+- [x] Avatar upload via signed URL: `createAvatarUploadUrl` →
+      direct PUT to Storage → `save` records path; bytes never on the
+      WebSocket.
+- [x] Avatar download: `UserRepositoryWrapper` substitutes path with
+      freshly signed URL on every read; missing file → field cleared.
+- [x] Client `pubspec.yaml` no longer declares
+      `tavernup_repositories_supabase`; `supabase_flutter` remains only
+      as transitive dep of `tavernup_auth_supabase`.
+- [x] Client `main.dart`: `realtimeTransportProvider` +
+      `remoteRepositoryBundleProvider` Riverpod overrides.
+- [x] `SupabaseSyncService` no longer reachable from the client.
 
-### Phase 7 — Constraint confirmation + merge back
-- [ ] CI check: `tavernup_client/pubspec.yaml` cannot list
-      `tavernup_repositories_supabase`.
-- [ ] All `custom_lint` rules at error severity; remaining violations
-      resolved.
-- [ ] Smoke-tests: client login, one read over WebSocket, one write,
-      one stream emission.
-- [ ] Branch merges back to `main`.
+### Phase 7 — Constraint confirmation + merge back ✅
+- [x] `scripts/check_client_isolation.sh` rejects pubspec violations;
+      verified by intentional injection.
+- [x] GitHub Actions workflow `.github/workflows/ci.yaml` runs the
+      isolation check, `dart analyze`, and `custom_lint`.
+- [x] Both `custom_lint` rules at `ErrorSeverity.ERROR`; the codebase
+      raises zero violations.
+- [x] End-to-end smoke test in
+      `packages/tavernup_repositories_remote/test/smoke_test.dart` —
+      env-gated; covers auth-frame, read, write, stream emission.
+- [x] Branch `rba-migration` merged to `main`.
 
 ### Concrete role/permission catalog
 Tracked separately. Architecture only fixes the mechanism. The role

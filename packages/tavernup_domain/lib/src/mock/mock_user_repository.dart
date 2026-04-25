@@ -64,4 +64,16 @@ class MockUserRepository implements IUserRepository {
     if (!uploadedAvatars.containsKey(userId)) return null;
     return 'mock://signed/$path?expires=${expiresIn.inSeconds}';
   }
+
+  @override
+  Future<({String uploadUrl, String path})> createAvatarUploadUrl({
+    required String userId,
+    required String contentType,
+  }) async {
+    final path = '$userId/avatar';
+    return (
+      uploadUrl: 'mock://upload/$path?contentType=$contentType',
+      path: path,
+    );
+  }
 }

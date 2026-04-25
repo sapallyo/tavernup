@@ -1,0 +1,30 @@
+# CODEOWNERS for tavernup
+#
+# Required reviewer for changes to security-sensitive paths. The RBA
+# layer is the structural backbone of the authorization architecture
+# (see architecture.md, "Authorization Layer (RBA)"); changes to it
+# must be reviewed deliberately, not waved through.
+#
+# Replace @Sapallyo with the appropriate review group / additional
+# co-owners as the team grows.
+
+# RBA layer: principal model, factory, wrappers
+/packages/tavernup_server/lib/src/rba/                    @Sapallyo
+
+# Raw Supabase repository implementations: only the RBA layer is
+# allowed to touch these. Changes here mean the persistence-side
+# data shape is shifting and the wrappers may need to follow.
+/packages/tavernup_repositories_supabase/lib/             @Sapallyo
+
+# Server bootstrap: the only legitimate site for SystemPrincipal use
+# alongside the WorkerRunner and WebhookHandler call sites.
+/packages/tavernup_server/bin/server.dart                 @Sapallyo
+
+# RLS migrations: the database-level safety net. Changes can silently
+# undo the boundary if mis-applied.
+/supabase/migrations/                                     @Sapallyo
+
+# Architecture docs: the source of truth for the model.
+/architecture.md                                          @Sapallyo
+/conventions.md                                           @Sapallyo
+/collaboration.md                                         @Sapallyo

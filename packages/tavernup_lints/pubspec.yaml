@@ -1,0 +1,12 @@
+name: tavernup_lints
+description: Custom lint rules that enforce the RBA boundary — raw repository imports stay inside the RBA module and SystemPrincipal usage stays inside its allow-listed call sites.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  analyzer: ^7.0.0
+  analyzer_plugin: ^0.13.0
+  custom_lint_builder: ^0.7.0

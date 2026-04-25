@@ -59,6 +59,24 @@ abstract interface class IRealtimeTransport {
     Map<String, dynamic> payload,
   );
 
+  /// Subscribes to a server-side stream method via the stream-subscribe
+  /// protocol introduced in Phase 5. The implementation sends a
+  /// `stream-subscribe` frame, routes the resulting `stream-event` /
+  /// `stream-error` / `stream-done` frames back to the returned stream,
+  /// and sends a `stream-unsubscribe` frame on cancellation.
+  ///
+  /// [repoName] / [method] / [args] match the server-side stream
+  /// resolver — see `SubscriptionManager`.
+  ///
+  /// Each emitted event is the raw `data` payload from the server (a
+  /// JSON-encodable value). Higher-level callers map it to domain
+  /// objects.
+  Stream<Object?> subscribeStream({
+    required String repoName,
+    required String method,
+    required Map<String, dynamic> args,
+  });
+
   /// Opens the connection.
   ///
   /// Must be called before [subscribe] or [publish].

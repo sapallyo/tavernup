@@ -54,7 +54,7 @@ void main() {
     transport = WebSocketRealtimeTransport(
       Uri.parse('ws://localhost:8080'),
       connectionFactory: (_) => connection,
-      uuid: _StubUuid(['req-1', 'req-2']),
+      uuid: _StubUuid(['req-1', 'req-2', 'req-3', 'req-4', 'req-5']),
     );
   });
 
@@ -170,5 +170,155 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     await sub.cancel();
     expect(states.last, RealtimeConnectionState.disconnected);
+  });
+
+  group('subscribeStream', () {
+    test(
+        'sends a stream-subscribe request and forwards stream-event frames',
+        () async {
+      await transport.connect();
+
+      final received = <Object?>[];
+      final sub = transport
+          .subscribeStream(
+            repoName: 'userTask',
+            method: 'watchForAssignee',
+            args: const {'assigneeId': 'u-1'},
+          )
+          .listen(received.add);
+
+      await Future<void>.delayed(Duration.zero);
+
+      // The first id is the streamId, the second is the requestId on
+      // the stream-subscribe call.
+      expect(connection.sent, hasLength(1));
+      final subscribeFrame =
+          jsonDecode(connection.sent.first) as Map<String, dynamic>;
+      expect(subscribeFrame['type'], 'stream-subscribe');
+      final streamId = subscribeFrame['payload']['streamId'] as String;
+
+      // Server acknowledges.
+      connection.receive(jsonEncode({
+        'requestId': subscribeFrame['requestId'],
+        'success': true,
+        'data': {'streamId': streamId},
+      }));
+
+      // Server pushes a stream-event.
+      connection.receive(jsonEncode({
+        'type': 'stream-event',
+        'payload': {
+          'streamId': streamId,
+          'data': [
+            {'id': 't-1'}
+          ],
+        },
+      }));
+      await Future<void>.delayed(Duration.zero);
+      expect(received, [
+        [
+          {'id': 't-1'}
+        ]
+      ]);
+
+      await sub.cancel();
+    });
+
+    test('cancellation sends a stream-unsubscribe frame', () async {
+      await transport.connect();
+
+      final sub = transport
+          .subscribeStream(
+            repoName: 'userTask',
+            method: 'watchForAssignee',
+            args: const {'assigneeId': 'u-1'},
+          )
+          .listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+
+      final subscribeFrame =
+          jsonDecode(connection.sent.first) as Map<String, dynamic>;
+      final streamId = subscribeFrame['payload']['streamId'] as String;
+
+      connection.receive(jsonEncode({
+        'requestId': subscribeFrame['requestId'],
+        'success': true,
+        'data': {'streamId': streamId},
+      }));
+
+      await sub.cancel();
+      await Future<void>.delayed(Duration.zero);
+
+      // 1 = subscribe, 2 = unsubscribe (latest).
+      final last =
+          jsonDecode(connection.sent.last) as Map<String, dynamic>;
+      expect(last['type'], 'stream-unsubscribe');
+      expect(last['payload']['streamId'], streamId);
+    });
+
+    test('stream-error frame raises an error on the stream', () async {
+      await transport.connect();
+
+      final errors = <Object>[];
+      final sub = transport
+          .subscribeStream(
+            repoName: 'userTask',
+            method: 'watchForAssignee',
+            args: const {'assigneeId': 'u-1'},
+          )
+          .listen((_) {}, onError: errors.add);
+      await Future<void>.delayed(Duration.zero);
+
+      final subscribeFrame =
+          jsonDecode(connection.sent.first) as Map<String, dynamic>;
+      final streamId = subscribeFrame['payload']['streamId'] as String;
+      connection.receive(jsonEncode({
+        'requestId': subscribeFrame['requestId'],
+        'success': true,
+        'data': {'streamId': streamId},
+      }));
+
+      connection.receive(jsonEncode({
+        'type': 'stream-error',
+        'payload': {'streamId': streamId, 'message': 'boom'},
+      }));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(errors, hasLength(1));
+      expect((errors.single as StateError).message, 'boom');
+      await sub.cancel();
+    });
+
+    test('stream-done frame closes the stream', () async {
+      await transport.connect();
+
+      var closed = false;
+      final sub = transport
+          .subscribeStream(
+            repoName: 'userTask',
+            method: 'watchForAssignee',
+            args: const {'assigneeId': 'u-1'},
+          )
+          .listen((_) {}, onDone: () => closed = true);
+      await Future<void>.delayed(Duration.zero);
+
+      final subscribeFrame =
+          jsonDecode(connection.sent.first) as Map<String, dynamic>;
+      final streamId = subscribeFrame['payload']['streamId'] as String;
+      connection.receive(jsonEncode({
+        'requestId': subscribeFrame['requestId'],
+        'success': true,
+        'data': {'streamId': streamId},
+      }));
+
+      connection.receive(jsonEncode({
+        'type': 'stream-done',
+        'payload': {'streamId': streamId},
+      }));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(closed, isTrue);
+      await sub.cancel();
+    });
   });
 }

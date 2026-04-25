@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  client-isolation:
+    name: Client cannot reach Supabase data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/check_client_isolation.sh
+
+  analyze:
+    name: dart analyze + custom_lint (server + repos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.11'
+
+      - name: Resolve dependencies
+        run: |
+          for pkg in packages/*/; do
+            (cd "$pkg" && dart pub get)
+          done
+
+      - name: dart analyze (each package)
+        run: |
+          for pkg in packages/*/; do
+            echo "--- $pkg ---"
+            (cd "$pkg" && dart analyze)
+          done
+
+      - name: custom_lint (server + repositories_supabase)
+        run: |
+          (cd packages/tavernup_server && dart run custom_lint)
+          (cd packages/tavernup_repositories_supabase && dart run custom_lint)
