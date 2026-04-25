@@ -1,6 +1,7 @@
 import 'package:supabase/supabase.dart' hide User;
 import 'package:tavernup_domain/tavernup_domain.dart';
-import 'package:tavernup_repositories_supabase/tavernup_repositories_supabase.dart';
+import 'package:tavernup_repositories_supabase/src/supabase_sync_service.dart';
+import 'package:tavernup_repositories_supabase/src/supabase_user_repository.dart';
 import 'package:test/test.dart';
 
 import 'test_client.dart';

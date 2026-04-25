@@ -22,3 +22,6 @@ dependencies:
 
 dev_dependencies:
   test: ^1.24.0
+  custom_lint: ^0.7.0
+  tavernup_lints:
+    path: ../tavernup_lints
