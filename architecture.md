@@ -28,9 +28,12 @@ Flutter-Version per `fvm` im Repo gepinnt (siehe `.fvmrc`). Primäre Entwicklung
 ### Supabase
 - Project: `tavernup`, EU Frankfurt
 - ID: `xrmwdfuqeaoredwnerau`
-- RLS policies disabled — authorization happens entirely in the server's
-  RBA layer (see Authorization Layer section). Supabase is treated as a
-  pure persistence backend.
+- RLS active with default-deny policy: only `service_role` is permitted
+  on all 9 domain tables; ANON and authenticated roles are blocked.
+  Authorization (RBAC) happens in the server's RBA layer
+  (see Authorization Layer section). The RLS policy exists solely to
+  make the structural assumption "only the server talks to Supabase"
+  physically enforceable; it is not the RBAC mechanism.
 - Realtime active on all 9 domain tables (see `supabase/migrations/20260424120000_enable_realtime.sql`)
 - `service_role` key lives **only** in `tavernup_server` (in the RBA layer)
 - Start env: `export $(cat .env | xargs) && dart run bin/server.dart`
@@ -201,6 +204,34 @@ than by the language itself. The TeamUp Java/Quarkus stack will be
 able to express the same boundary as a Java module with explicit
 exports — strengthening the guarantee at the language level without
 changing the architecture.
+
+### RLS as Safety Net
+
+The four mechanisms above prevent code in this repository from
+bypassing the RBA layer. They do not prevent a third party from
+extracting the published `ANON_KEY` out of the Flutter bundle and
+talking to Supabase directly. Without RLS, Supabase would happily
+return every row to that caller — making the "only the server talks
+to Supabase" assumption a code convention with no physical backing.
+
+Therefore RLS is enabled on all 9 domain tables with a single
+default-deny policy: **only `service_role` is permitted**. ANON and
+authenticated roles cannot read, insert, update, or delete on these
+tables. The `service_role` key lives only inside the server (in the
+RBA layer's Supabase client construction); no other process can present
+it.
+
+This is **not** RBAC. There is exactly one policy per table, with
+identical contents, and it does not consult the user identity. RBAC
+remains in the authorizing repository wrappers, where it has access
+to the full domain context. RLS exists only to make the structural
+boundary physically real: any path that does not go through the RBA
+layer hits a closed door at the database.
+
+Auth-related operations (login, token refresh, password reset) are
+unaffected — they target Supabase Auth endpoints, not the domain
+tables, and continue to work with the public `ANON_KEY` from the
+client.
 
 ### Realtime Abstraction
 - Layer 1: `IRealtimeTransport` — WebSocket transport to tavernup_server

@@ -43,6 +43,9 @@ path.
 ### Scope
 
 **Server side**
+- [ ] Re-enable RLS on all 9 domain tables with a single default-deny
+      policy (only `service_role` allowed). Auth tables remain
+      untouched. Prerequisite — without it, the migration is cosmetic.
 - [ ] Create RBA layer module in `tavernup_server` —
       authorizing wrapper for each `IXxxRepository`
 - [ ] Move `service_role` Supabase client construction into the RBA
