@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:tavernup_domain/tavernup_domain.dart';
 
-/// Handles incoming WebSocket messages from the Flutter client.
+import '../rba/rba_repository_bundle.dart';
+
+/// Dispatches incoming WebSocket messages from authenticated clients.
 ///
 /// Each message must be a JSON object with the fields:
 /// - `type`: String — the message type (e.g. `validate-user`, `complete-task`)
@@ -14,24 +16,26 @@ import 'package:tavernup_domain/tavernup_domain.dart';
 /// { "requestId": "...", "success": true, "data": { ... } }
 /// { "requestId": "...", "success": false, "error": "..." }
 /// ```
+///
+/// Repository access is provided via the [RbaRepositoryBundle] passed
+/// per call — never via construction-time dependencies. This makes the
+/// per-connection principal flow naturally into every dispatch: the
+/// `AuthenticatedConnection` builds a bundle for its principal and
+/// hands it in for each authenticated frame.
 class MessageHandler {
-  final IUserRepository _userRepository;
-  final IUserTaskRepository _userTaskRepository;
   final Future<void> Function(String taskId, Map<String, Variable> variables)
       _completeUserTask;
 
   MessageHandler({
-    required IUserRepository userRepository,
-    required IUserTaskRepository userTaskRepository,
     required Future<void> Function(
             String taskId, Map<String, Variable> variables)
         completeUserTask,
-  })  : _userRepository = userRepository,
-        _userTaskRepository = userTaskRepository,
-        _completeUserTask = completeUserTask;
+  }) : _completeUserTask = completeUserTask;
 
-  /// Processes a raw WebSocket message and returns the response string.
-  Future<String> handle(String message) async {
+  /// Processes [message] using the repositories scoped to the calling
+  /// connection's principal. Returns the response string the caller
+  /// should write back on the socket.
+  Future<String> handle(String message, RbaRepositoryBundle repos) async {
     final Map<String, dynamic> json;
     try {
       json = jsonDecode(message) as Map<String, dynamic>;
@@ -50,9 +54,9 @@ class MessageHandler {
     try {
       switch (type) {
         case 'validate-user':
-          return await _handleValidateUser(requestId, payload);
+          return await _handleValidateUser(repos.user, requestId, payload);
         case 'complete-task':
-          return await _handleCompleteTask(requestId, payload);
+          return await _handleCompleteTask(repos.userTask, requestId, payload);
         default:
           return _error(requestId, 'Unknown message type: $type');
       }
@@ -62,18 +66,24 @@ class MessageHandler {
   }
 
   Future<String> _handleValidateUser(
-      String requestId, Map<String, dynamic> payload) async {
+    IUserRepository userRepository,
+    String requestId,
+    Map<String, dynamic> payload,
+  ) async {
     final nickname = payload['nickname'] as String?;
     if (nickname == null) return _error(requestId, 'Missing nickname');
 
-    final user = await _userRepository.findByNickname(nickname);
+    final user = await userRepository.findByNickname(nickname);
     if (user == null) return _error(requestId, 'User not found: $nickname');
 
     return _success(requestId, {'userId': user.id});
   }
 
   Future<String> _handleCompleteTask(
-      String requestId, Map<String, dynamic> payload) async {
+    IUserTaskRepository userTaskRepository,
+    String requestId,
+    Map<String, dynamic> payload,
+  ) async {
     final taskId = payload['taskId'] as String?;
     if (taskId == null) return _error(requestId, 'Missing taskId');
 
@@ -83,7 +93,7 @@ class MessageHandler {
     );
 
     await _completeUserTask(taskId, variables);
-    await _userTaskRepository.delete(taskId);
+    await userTaskRepository.delete(taskId);
 
     return _success(requestId, {});
   }

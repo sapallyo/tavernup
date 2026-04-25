@@ -2,30 +2,26 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import 'message_handler.dart';
+import 'connection_manager.dart';
 
-/// WebSocket server that accepts client connections and dispatches
-/// incoming messages to [MessageHandler].
+/// Adapts shelf's WebSocket upgrade into the [ConnectionManager] flow.
 ///
-/// Each connected client gets its own channel. Messages are processed
-/// sequentially per client.
+/// On connect it hands the channel's stream and sink to
+/// `ConnectionManager.accept`, which either spins up an
+/// [AuthenticatedConnection] for the client or — if the awaiting-auth
+/// pool is full — closes the channel immediately.
 class WebSocketServer {
-  final MessageHandler _messageHandler;
+  final ConnectionManager _connectionManager;
 
-  WebSocketServer(this._messageHandler);
+  WebSocketServer(this._connectionManager);
 
-  /// Returns a shelf [Handler] that upgrades HTTP connections to WebSocket.
   Handler get handler => webSocketHandler(_onConnection);
 
   void _onConnection(WebSocketChannel channel) {
-    channel.stream.listen(
-      (message) async {
-        if (message is! String) return;
-        final response = await _messageHandler.handle(message);
-        channel.sink.add(response);
-      },
-      onError: (error) => channel.sink.close(),
-      onDone: () => channel.sink.close(),
+    _connectionManager.accept(
+      incoming: channel.stream,
+      send: (data) => channel.sink.add(data),
+      close: () => channel.sink.close(),
     );
   }
 }

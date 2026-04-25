@@ -10,6 +10,9 @@ import 'package:tavernup_process_camunda/tavernup_process_camunda.dart';
 import 'package:tavernup_server/src/rba/principal.dart';
 import 'package:tavernup_server/src/rba/rba_factory.dart';
 import 'package:tavernup_server/src/webhook/webhook_handler.dart';
+import 'package:tavernup_server/src/websocket/auth_token_validator.dart';
+import 'package:tavernup_server/src/websocket/connection_manager.dart';
+import 'package:tavernup_server/src/websocket/ip_rate_limit_middleware.dart';
 import 'package:tavernup_server/src/websocket/message_handler.dart';
 import 'package:tavernup_server/src/websocket/websocket_server.dart';
 import 'package:tavernup_server/src/workers/entity_worker.dart';
@@ -32,8 +35,8 @@ void main() async {
   );
 
   // System-bootstrap repositories: registry population, webhook routing,
-  // worker dispatch. User-driven request paths will obtain their own
-  // bundles per connected client once the WebSocket auth lands.
+  // worker dispatch. Per-connection user repositories come from the
+  // ConnectionManager once each socket finishes auth.
   final systemRepos = rba.forPrincipal(SystemPrincipal.instance);
 
   final registry = EntityRepositoryRegistry()
@@ -50,15 +53,22 @@ void main() async {
   );
 
   final messageHandler = MessageHandler(
-    userRepository: systemRepos.user,
-    userTaskRepository: systemRepos.userTask,
     completeUserTask: (taskId, variables) => camunda.completeUserTask(
       taskId: taskId,
       variables: variables,
     ),
   );
 
-  final wsServer = WebSocketServer(messageHandler);
+  final connectionManager = ConnectionManager(
+    validator: SupabaseAuthTokenValidator(
+      supabaseUrl: supabaseUrl,
+      apiKey: serviceRoleKey,
+    ),
+    rba: rba,
+    messageHandler: messageHandler,
+  );
+
+  final wsServer = WebSocketServer(connectionManager);
 
   final webhookHandler = WebhookHandler(
     userTaskRepository: systemRepos.userTask,
@@ -70,8 +80,12 @@ void main() async {
     (_) => unawaited(workerRunner.runOnce()),
   );
 
+  final wsHandler = const Pipeline()
+      .addMiddleware(ipConnectRateLimit())
+      .addHandler(wsServer.handler);
+
   final router = Router()
-    ..get('/ws', wsServer.handler)
+    ..get('/ws', wsHandler)
     ..post('/webhook/task-created', webhookHandler.handleTaskCreated);
 
   final handler =
@@ -82,4 +96,5 @@ void main() async {
   print('Server running on port ${server.port}');
   print('Camunda engine: $camundaBaseUrl');
   print('Safety-net interval: ${_safetyNetInterval.inSeconds}s');
+  print('Awaiting-auth pool size: $kDefaultAwaitingAuthLimit');
 }

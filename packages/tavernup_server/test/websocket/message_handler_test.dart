@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'package:tavernup_domain/tavernup_domain.dart';
 import 'package:test/test.dart';
 
+import 'package:tavernup_server/src/rba/rba_repository_bundle.dart';
 import 'package:tavernup_server/src/websocket/message_handler.dart';
 
 void main() {
   late MockUserRepository userRepository;
   late MockUserTaskRepository userTaskRepository;
+  late RbaRepositoryBundle repos;
   late List<(String, Map<String, Variable>)> completedTasks;
   late MessageHandler handler;
 
@@ -30,10 +32,18 @@ void main() {
   setUp(() {
     userRepository = MockUserRepository()..seed([testUser]);
     userTaskRepository = MockUserTaskRepository();
+    repos = RbaRepositoryBundle(
+      user: userRepository,
+      character: MockCharacterRepository(),
+      gameGroup: MockGameGroupRepository(),
+      invitation: MockInvitationRepository(),
+      storyNode: MockStoryNodeRepository(),
+      storyNodeInstance: MockStoryNodeInstanceRepository(),
+      session: MockSessionRepository(),
+      userTask: userTaskRepository,
+    );
     completedTasks = [];
     handler = MessageHandler(
-      userRepository: userRepository,
-      userTaskRepository: userTaskRepository,
       completeUserTask: (taskId, variables) async {
         completedTasks.add((taskId, variables));
       },
@@ -51,7 +61,7 @@ void main() {
         'type': 'validate-user',
         'requestId': 'req-1',
         'payload': {'nickname': 'Zephyr'},
-      })));
+      }), repos));
       expect(response['success'], isTrue);
       expect(response['requestId'], 'req-1');
       expect(response['data']['userId'], 'user-1');
@@ -62,7 +72,7 @@ void main() {
         'type': 'validate-user',
         'requestId': 'req-2',
         'payload': {'nickname': 'Unknown'},
-      })));
+      }), repos));
       expect(response['success'], isFalse);
       expect(response['error'], contains('not found'));
     });
@@ -72,7 +82,7 @@ void main() {
         'type': 'validate-user',
         'requestId': 'req-3',
         'payload': {},
-      })));
+      }), repos));
       expect(response['success'], isFalse);
       expect(response['error'], contains('Missing nickname'));
     });
@@ -89,7 +99,7 @@ void main() {
           'taskId': 't-1',
           'variables': {'accepted': 'true'},
         },
-      })));
+      }), repos));
 
       expect(response['success'], isTrue);
       expect(completedTasks, hasLength(1));
@@ -103,7 +113,7 @@ void main() {
         'type': 'complete-task',
         'requestId': 'req-5',
         'payload': {},
-      })));
+      }), repos));
       expect(response['success'], isFalse);
       expect(response['error'], contains('Missing taskId'));
     });
@@ -111,7 +121,7 @@ void main() {
 
   group('protocol', () {
     test('returns error for invalid JSON', () async {
-      final response = decode(await handler.handle('not json'));
+      final response = decode(await handler.handle('not json', repos));
       expect(response['success'], isFalse);
       expect(response['error'], contains('Invalid JSON'));
     });
@@ -121,7 +131,7 @@ void main() {
         'type': 'unknown',
         'requestId': 'req-6',
         'payload': {},
-      })));
+      }), repos));
       expect(response['success'], isFalse);
       expect(response['error'], contains('Unknown message type'));
     });
@@ -131,7 +141,7 @@ void main() {
         'type': 'validate-user',
         'requestId': 'my-id-123',
         'payload': {'nickname': 'Zephyr'},
-      })));
+      }), repos));
       expect(response['requestId'], 'my-id-123');
     });
   });
