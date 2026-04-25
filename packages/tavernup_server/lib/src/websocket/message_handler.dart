@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:tavernup_domain/tavernup_domain.dart';
 
 import '../rba/rba_repository_bundle.dart';
+import 'repo_dispatcher.dart';
 
 /// Dispatches incoming WebSocket messages from authenticated clients.
 ///
@@ -25,12 +26,15 @@ import '../rba/rba_repository_bundle.dart';
 class MessageHandler {
   final Future<void> Function(String taskId, Map<String, Variable> variables)
       _completeUserTask;
+  final RepoDispatcher _repoDispatcher;
 
   MessageHandler({
     required Future<void> Function(
             String taskId, Map<String, Variable> variables)
         completeUserTask,
-  }) : _completeUserTask = completeUserTask;
+    RepoDispatcher? repoDispatcher,
+  })  : _completeUserTask = completeUserTask,
+        _repoDispatcher = repoDispatcher ?? RepoDispatcher();
 
   /// Processes [message] using the repositories scoped to the calling
   /// connection's principal. Returns the response string the caller
@@ -52,6 +56,10 @@ class MessageHandler {
     }
 
     try {
+      if (type.startsWith('repo.')) {
+        final data = await _repoDispatcher.dispatch(type, payload, repos);
+        return _success(requestId, {'result': data});
+      }
       switch (type) {
         case 'validate-user':
           return await _handleValidateUser(repos.user, requestId, payload);
