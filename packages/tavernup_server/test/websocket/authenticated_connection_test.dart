@@ -4,10 +4,13 @@ import 'dart:convert';
 import 'package:tavernup_domain/tavernup_domain.dart';
 import 'package:test/test.dart';
 
+import 'package:tavernup_server/src/rba/principal.dart';
+import 'package:tavernup_server/src/rba/rba_factory.dart';
 import 'package:tavernup_server/src/rba/rba_repository_bundle.dart';
 import 'package:tavernup_server/src/websocket/authenticated_connection.dart';
 import 'package:tavernup_server/src/websocket/auth_token_validator.dart';
 import 'package:tavernup_server/src/websocket/message_handler.dart';
+import 'package:tavernup_server/src/websocket/subscription_manager.dart';
 
 class _FakeValidator implements IAuthTokenValidator {
   final TokenValidationResult Function(String token) _resolve;
@@ -16,6 +19,15 @@ class _FakeValidator implements IAuthTokenValidator {
   @override
   Future<TokenValidationResult> validate(String token) async =>
       _resolve(token);
+}
+
+class _StubFactory implements RbaFactory {
+  final RbaRepositoryBundle _bundle;
+  _StubFactory(this._bundle);
+  @override
+  RbaRepositoryBundle forPrincipal(Principal p) => _bundle;
+  @override
+  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 RbaRepositoryBundle _bundle({IUserRepository? user}) {
@@ -44,6 +56,7 @@ class _Harness {
     required IAuthTokenValidator validator,
     Duration authTimeout = const Duration(seconds: 5),
     RbaRepositoryBundle? bundle,
+    SubscriptionManager? subscriptions,
   }) {
     final caughtBundle = bundle ?? _bundle();
     connection = AuthenticatedConnection(
@@ -57,6 +70,7 @@ class _Harness {
       messageHandler: MessageHandler(
         completeUserTask: (_, __) async {},
       ),
+      subscriptions: subscriptions,
       authTimeout: authTimeout,
       onAuthSlotReleased: () => slotReleases++,
     );
@@ -215,5 +229,241 @@ void main() {
     expect(h.lastResponse['success'], isFalse);
     expect(h.lastResponse['error'], contains('Missing token'));
     expect(h.connection.isAuthenticated, isFalse);
+  });
+
+  group('stream subscriptions', () {
+    Future<_Harness> authenticated({
+      required SubscriptionManager subscriptions,
+      RbaRepositoryBundle? bundle,
+    }) async {
+      final h = _Harness(
+        validator: _FakeValidator((_) => const TokenValid('user-1')),
+        bundle: bundle,
+        subscriptions: subscriptions,
+      );
+      await h.send({
+        'type': 'auth',
+        'requestId': 'r0',
+        'payload': {'token': 'good'},
+      });
+      h.outgoing.clear();
+      return h;
+    }
+
+    test('stream-subscribe registers and stream-event frames are sent',
+        () async {
+      final userTask = MockUserTaskRepository();
+      final bundle = _bundle()..userTask;
+      final wrapped = RbaRepositoryBundle(
+        user: bundle.user,
+        character: bundle.character,
+        gameGroup: bundle.gameGroup,
+        invitation: bundle.invitation,
+        storyNode: bundle.storyNode,
+        storyNodeInstance: bundle.storyNodeInstance,
+        session: bundle.session,
+        userTask: userTask,
+      );
+      final mgr = SubscriptionManager(_StubFactory(wrapped));
+      final h = await authenticated(subscriptions: mgr, bundle: wrapped);
+
+      await h.send({
+        'type': 'stream-subscribe',
+        'requestId': 'r1',
+        'payload': {
+          'streamId': 's-1',
+          'repoName': 'userTask',
+          'method': 'watchForAssignee',
+          'args': {'assigneeId': 'user-1'},
+        },
+      });
+      expect(h.lastResponse['success'], isTrue);
+      expect(h.lastResponse['data']['streamId'], 's-1');
+      expect(h.connection.activeStreamCount, 1);
+
+      await userTask.create(UserTask(
+        id: 't-1',
+        name: 'accept-invitation',
+        processInstanceId: 'pi-1',
+        variables: const {},
+        assignee: 'user-1',
+        created: DateTime(2026, 4, 24, 12),
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      final events = h.outgoing
+          .map((s) => jsonDecode(s) as Map<String, dynamic>)
+          .where((m) => m['type'] == 'stream-event')
+          .toList();
+      expect(events, hasLength(1));
+      expect(events.single['payload']['streamId'], 's-1');
+      final list = events.single['payload']['data'] as List;
+      expect((list.single as Map)['id'], 't-1');
+    });
+
+    test('stream-unsubscribe stops further events', () async {
+      final userTask = MockUserTaskRepository();
+      final bundle = RbaRepositoryBundle(
+        user: MockUserRepository(),
+        character: MockCharacterRepository(),
+        gameGroup: MockGameGroupRepository(),
+        invitation: MockInvitationRepository(),
+        storyNode: MockStoryNodeRepository(),
+        storyNodeInstance: MockStoryNodeInstanceRepository(),
+        session: MockSessionRepository(),
+        userTask: userTask,
+      );
+      final mgr = SubscriptionManager(_StubFactory(bundle));
+      final h = await authenticated(subscriptions: mgr, bundle: bundle);
+
+      await h.send({
+        'type': 'stream-subscribe',
+        'requestId': 'r1',
+        'payload': {
+          'streamId': 's-1',
+          'repoName': 'userTask',
+          'method': 'watchForAssignee',
+          'args': {'assigneeId': 'user-1'},
+        },
+      });
+      await h.send({
+        'type': 'stream-unsubscribe',
+        'requestId': 'r2',
+        'payload': {'streamId': 's-1'},
+      });
+      expect(h.connection.activeStreamCount, 0);
+      expect(mgr.upstreamCount, 0);
+
+      h.outgoing.clear();
+      await userTask.create(UserTask(
+        id: 't-1',
+        name: 'accept-invitation',
+        processInstanceId: 'pi-1',
+        variables: const {},
+        assignee: 'user-1',
+        created: DateTime(2026, 4, 24, 12),
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      final events = h.outgoing
+          .map((s) => jsonDecode(s) as Map<String, dynamic>)
+          .where((m) => m['type'] == 'stream-event')
+          .toList();
+      expect(events, isEmpty);
+    });
+
+    test('connection close releases all stream subscriptions', () async {
+      final bundle = _bundle();
+      final mgr = SubscriptionManager(_StubFactory(bundle));
+      final h = await authenticated(subscriptions: mgr, bundle: bundle);
+
+      await h.send({
+        'type': 'stream-subscribe',
+        'requestId': 'r1',
+        'payload': {
+          'streamId': 's-1',
+          'repoName': 'userTask',
+          'method': 'watchForAssignee',
+          'args': {'assigneeId': 'user-1'},
+        },
+      });
+      await h.send({
+        'type': 'stream-subscribe',
+        'requestId': 'r2',
+        'payload': {
+          'streamId': 's-2',
+          'repoName': 'userTask',
+          'method': 'watchForAssignee',
+          'args': {'assigneeId': 'user-2'},
+        },
+      });
+      expect(h.connection.activeStreamCount, 2);
+      expect(mgr.upstreamCount, 2);
+
+      await h.controller.close();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(h.connection.activeStreamCount, 0);
+      expect(mgr.upstreamCount, 0);
+    });
+
+    test('stream-subscribe without a configured manager is rejected',
+        () async {
+      final h = _Harness(
+          validator: _FakeValidator((_) => const TokenValid('user-1')));
+      await h.send({
+        'type': 'auth',
+        'requestId': 'r0',
+        'payload': {'token': 'good'},
+      });
+      h.outgoing.clear();
+
+      await h.send({
+        'type': 'stream-subscribe',
+        'requestId': 'r1',
+        'payload': {
+          'streamId': 's-1',
+          'repoName': 'userTask',
+          'method': 'watchForAssignee',
+          'args': {'assigneeId': 'user-1'},
+        },
+      });
+      expect(h.lastResponse['success'], isFalse);
+      expect(h.lastResponse['error'], contains('not configured'));
+    });
+
+    test('stream-subscribe with a missing field is rejected', () async {
+      final mgr = SubscriptionManager(_StubFactory(_bundle()));
+      final h = await authenticated(subscriptions: mgr);
+
+      await h.send({
+        'type': 'stream-subscribe',
+        'requestId': 'r1',
+        'payload': {
+          'streamId': 's-1',
+          // missing repoName
+          'method': 'watchForAssignee',
+          'args': {'assigneeId': 'user-1'},
+        },
+      });
+      expect(h.lastResponse['success'], isFalse);
+      expect(h.lastResponse['error'], contains('Missing'));
+    });
+
+    test('stream-subscribe with a duplicate streamId is rejected',
+        () async {
+      final mgr = SubscriptionManager(_StubFactory(_bundle()));
+      final h = await authenticated(subscriptions: mgr);
+
+      Future<void> subscribe(String requestId) => h.send({
+            'type': 'stream-subscribe',
+            'requestId': requestId,
+            'payload': {
+              'streamId': 's-1',
+              'repoName': 'userTask',
+              'method': 'watchForAssignee',
+              'args': {'assigneeId': 'user-1'},
+            },
+          });
+
+      await subscribe('r1');
+      await subscribe('r2');
+      expect(h.lastResponse['success'], isFalse);
+      expect(h.lastResponse['error'], contains('already in use'));
+    });
+
+    test('stream-unsubscribe with an unknown streamId is rejected',
+        () async {
+      final mgr = SubscriptionManager(_StubFactory(_bundle()));
+      final h = await authenticated(subscriptions: mgr);
+
+      await h.send({
+        'type': 'stream-unsubscribe',
+        'requestId': 'r1',
+        'payload': {'streamId': 'never-existed'},
+      });
+      expect(h.lastResponse['success'], isFalse);
+      expect(h.lastResponse['error'], contains('Unknown streamId'));
+    });
   });
 }

@@ -2,6 +2,7 @@ import '../rba/rba_factory.dart';
 import 'authenticated_connection.dart';
 import 'auth_token_validator.dart';
 import 'message_handler.dart';
+import 'subscription_manager.dart';
 
 /// Default upper bound on concurrent connections that have not yet
 /// presented an `auth` frame. Tuned for "hundreds of users" expected
@@ -21,6 +22,7 @@ class ConnectionManager {
   final IAuthTokenValidator _validator;
   final RbaFactory _rba;
   final MessageHandler _messageHandler;
+  final SubscriptionManager? _subscriptions;
   final int _awaitingAuthLimit;
   final Duration _authTimeout;
 
@@ -30,11 +32,13 @@ class ConnectionManager {
     required IAuthTokenValidator validator,
     required RbaFactory rba,
     required MessageHandler messageHandler,
+    SubscriptionManager? subscriptions,
     int awaitingAuthLimit = kDefaultAwaitingAuthLimit,
     Duration authTimeout = kDefaultAuthTimeout,
   })  : _validator = validator,
         _rba = rba,
         _messageHandler = messageHandler,
+        _subscriptions = subscriptions,
         _awaitingAuthLimit = awaitingAuthLimit,
         _authTimeout = authTimeout;
 
@@ -62,6 +66,7 @@ class ConnectionManager {
       validator: _validator,
       bundleFor: (p) => _rba.forPrincipal(p),
       messageHandler: _messageHandler,
+      subscriptions: _subscriptions,
       authTimeout: _authTimeout,
       onAuthSlotReleased: _releaseSlot,
     );

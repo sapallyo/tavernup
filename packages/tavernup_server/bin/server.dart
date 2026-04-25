@@ -14,6 +14,7 @@ import 'package:tavernup_server/src/websocket/auth_token_validator.dart';
 import 'package:tavernup_server/src/websocket/connection_manager.dart';
 import 'package:tavernup_server/src/websocket/ip_rate_limit_middleware.dart';
 import 'package:tavernup_server/src/websocket/message_handler.dart';
+import 'package:tavernup_server/src/websocket/subscription_manager.dart';
 import 'package:tavernup_server/src/websocket/websocket_server.dart';
 import 'package:tavernup_server/src/workers/entity_worker.dart';
 import 'package:tavernup_server/src/workers/worker_runner.dart';
@@ -59,6 +60,8 @@ void main() async {
     ),
   );
 
+  final subscriptionManager = SubscriptionManager(rba);
+
   final connectionManager = ConnectionManager(
     validator: SupabaseAuthTokenValidator(
       supabaseUrl: supabaseUrl,
@@ -66,6 +69,7 @@ void main() async {
     ),
     rba: rba,
     messageHandler: messageHandler,
+    subscriptions: subscriptionManager,
   );
 
   final wsServer = WebSocketServer(connectionManager);
