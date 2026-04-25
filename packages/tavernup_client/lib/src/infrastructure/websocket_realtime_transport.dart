@@ -55,6 +55,7 @@ class WebSocketRealtimeTransport implements IRealtimeTransport {
   final Map<String, Completer<Map<String, dynamic>>> _pendingRequests = {};
   final Map<String, StreamController<Map<String, dynamic>>> _topicControllers =
       {};
+  final Map<String, StreamController<Object?>> _streamControllers = {};
 
   WebSocketRealtimeTransport(
     this._uri, {
@@ -134,6 +135,47 @@ class WebSocketRealtimeTransport implements IRealtimeTransport {
     return controller.stream;
   }
 
+  @override
+  Stream<Object?> subscribeStream({
+    required String repoName,
+    required String method,
+    required Map<String, dynamic> args,
+  }) {
+    final streamId = _uuid.v4();
+    late final StreamController<Object?> controller;
+    controller = StreamController<Object?>.broadcast(
+      onCancel: () async {
+        if (_streamControllers.remove(streamId) == null) return;
+        if (_state != RealtimeConnectionState.connected) return;
+        try {
+          await request('stream-unsubscribe', {'streamId': streamId});
+        } catch (_) {
+          // Connection might be in tear-down; nothing to do.
+        }
+      },
+    );
+    _streamControllers[streamId] = controller;
+
+    unawaited(() async {
+      try {
+        await request('stream-subscribe', {
+          'streamId': streamId,
+          'repoName': repoName,
+          'method': method,
+          'args': args,
+        });
+      } catch (e) {
+        if (!controller.isClosed) {
+          controller.addError(e);
+          await controller.close();
+        }
+        _streamControllers.remove(streamId);
+      }
+    }());
+
+    return controller.stream;
+  }
+
   void _handleIncoming(dynamic raw) {
     if (raw is! String) return;
     final Map<String, dynamic> msg;
@@ -154,6 +196,28 @@ class WebSocketRealtimeTransport implements IRealtimeTransport {
         completer.completeError(
           StateError((msg['error'] as String?) ?? 'Unknown server error'),
         );
+      }
+      return;
+    }
+
+    final type = msg['type'] as String?;
+    if (type == 'stream-event' ||
+        type == 'stream-error' ||
+        type == 'stream-done') {
+      final payload = (msg['payload'] as Map<String, dynamic>?) ?? const {};
+      final streamId = payload['streamId'] as String?;
+      if (streamId == null) return;
+      final controller = _streamControllers[streamId];
+      if (controller == null) return;
+      switch (type) {
+        case 'stream-event':
+          controller.add(payload['data']);
+        case 'stream-error':
+          controller.addError(StateError(
+              (payload['message'] as String?) ?? 'Stream error'));
+        case 'stream-done':
+          unawaited(controller.close());
+          _streamControllers.remove(streamId);
       }
       return;
     }
@@ -185,6 +249,13 @@ class WebSocketRealtimeTransport implements IRealtimeTransport {
       }
     }
     _pendingRequests.clear();
+    for (final controller in _streamControllers.values) {
+      if (!controller.isClosed) {
+        controller.addError(StateError('Connection closed'));
+        unawaited(controller.close());
+      }
+    }
+    _streamControllers.clear();
     if (_state != RealtimeConnectionState.disconnected) {
       _updateState(RealtimeConnectionState.disconnected);
     }

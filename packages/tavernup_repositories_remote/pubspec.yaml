@@ -1,0 +1,15 @@
+name: tavernup_repositories_remote
+description: WebSocket-backed implementations of the IXxxRepository interfaces. The Flutter client uses these to talk to tavernup_server's RBA layer; no direct Supabase access from the client.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  tavernup_domain:
+    path: ../tavernup_domain
+  http: ^1.2.0
+
+dev_dependencies:
+  test: ^1.24.0

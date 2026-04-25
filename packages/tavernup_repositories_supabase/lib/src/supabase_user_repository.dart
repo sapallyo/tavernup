@@ -81,4 +81,16 @@ class SupabaseUserRepository implements IUserRepository {
       return null;
     }
   }
+
+  @override
+  Future<({String uploadUrl, String path})> createAvatarUploadUrl({
+    required String userId,
+    required String contentType,
+  }) async {
+    final path = '$userId/avatar';
+    final response = await _client.storage
+        .from(_avatarsBucket)
+        .createSignedUploadUrl(path);
+    return (uploadUrl: response.signedUrl, path: path);
+  }
 }

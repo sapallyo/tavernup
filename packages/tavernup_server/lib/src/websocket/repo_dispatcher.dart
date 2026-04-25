@@ -36,6 +36,13 @@ class RepoDispatcher {
           path: _str(payload, 'path'),
           expiresIn: Duration(seconds: _intOr(payload, 'expiresInSeconds', 3600)),
         ),
+      'repo.user.createAvatarUploadUrl' => () async {
+          final result = await repos.user.createAvatarUploadUrl(
+            userId: _str(payload, 'userId'),
+            contentType: _str(payload, 'contentType'),
+          );
+          return {'uploadUrl': result.uploadUrl, 'path': result.path};
+        }(),
 
       // ── Character ──
       'repo.character.getOwned' => (await repos.character.getOwned(_str(payload, 'ownerId')))

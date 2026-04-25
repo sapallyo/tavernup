@@ -13,6 +13,7 @@ class MockRealtimeTransport implements IRealtimeTransport {
       StreamController<RealtimeConnectionState>.broadcast();
   final Map<String, StreamController<Map<String, dynamic>>> _topicControllers =
       {};
+  final Map<_StreamKey, StreamController<Object?>> _streamControllers = {};
   final List<_SentRequest> _sentRequests = [];
   final List<_Published> _publishedMessages = [];
 
@@ -95,9 +96,41 @@ class MockRealtimeTransport implements IRealtimeTransport {
     pending.completer.completeError(error);
   }
 
+  @override
+  Stream<Object?> subscribeStream({
+    required String repoName,
+    required String method,
+    required Map<String, dynamic> args,
+  }) {
+    final key = _StreamKey(repoName, method, args);
+    final controller = _streamControllers.putIfAbsent(
+      key,
+      () => StreamController<Object?>.broadcast(),
+    );
+    return controller.stream;
+  }
+
   /// Simulates a server-initiated push to [topic] with [payload].
   void simulatePush(String topic, Map<String, dynamic> payload) {
     _topicControllers[topic]?.add(payload);
+  }
+
+  /// Pushes a [data] event into the stream subscribers of
+  /// `(repoName, method, args)`. Throws if nothing has subscribed yet —
+  /// useful in tests to assert the subscription happened.
+  void simulateStreamEvent({
+    required String repoName,
+    required String method,
+    required Map<String, dynamic> args,
+    required Object? data,
+  }) {
+    final key = _StreamKey(repoName, method, args);
+    final controller = _streamControllers[key];
+    if (controller == null) {
+      throw StateError(
+          'No active subscription for $repoName.$method with args $args');
+    }
+    controller.add(data);
   }
 
   /// Releases resources. Call in [tearDown] after tests.
@@ -106,7 +139,38 @@ class MockRealtimeTransport implements IRealtimeTransport {
     for (final c in _topicControllers.values) {
       await c.close();
     }
+    for (final c in _streamControllers.values) {
+      await c.close();
+    }
   }
+}
+
+class _StreamKey {
+  final String repoName;
+  final String method;
+  final String _argsKey;
+
+  _StreamKey(this.repoName, this.method, Map<String, dynamic> args)
+      : _argsKey = _canonicalise(args);
+
+  static String _canonicalise(Map<String, dynamic> args) {
+    final keys = args.keys.toList()..sort();
+    final buf = StringBuffer();
+    for (final k in keys) {
+      buf.write('$k=${args[k]};');
+    }
+    return buf.toString();
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _StreamKey &&
+      other.repoName == repoName &&
+      other.method == method &&
+      other._argsKey == _argsKey;
+
+  @override
+  int get hashCode => Object.hash(repoName, method, _argsKey);
 }
 
 class _SentRequest {

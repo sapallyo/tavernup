@@ -10,7 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tavernup_auth_supabase/tavernup_auth_supabase.dart';
+
+import 'src/infrastructure/websocket_realtime_transport.dart';
 import 'src/state/auth_providers.dart';
+import 'src/state/realtime_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,12 +23,19 @@ void main() async {
     anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
   );
 
+  final serverUrl = Uri.parse(const String.fromEnvironment(
+    'TAVERNUP_SERVER_WS',
+    defaultValue: 'ws://localhost:8080/ws',
+  ));
+  final transport = WebSocketRealtimeTransport(serverUrl);
+
   runApp(
     ProviderScope(
       overrides: [
         authServiceProvider.overrideWithValue(
           SupabaseAuthService(Supabase.instance.client),
         ),
+        realtimeTransportProvider.overrideWithValue(transport),
       ],
       child: const TavernUpApp(),
     ),

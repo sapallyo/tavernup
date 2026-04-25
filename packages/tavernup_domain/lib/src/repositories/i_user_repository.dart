@@ -62,4 +62,21 @@ abstract interface class IUserRepository {
     required String path,
     Duration expiresIn = const Duration(hours: 1),
   });
+
+  /// Creates a one-time signed Storage URL the caller PUTs the avatar
+  /// bytes to directly. Avoids tunnelling large binary payloads through
+  /// the server; see architecture.md "Storage Access".
+  ///
+  /// [userId] identifies the slot — the path is deterministic
+  /// (`{userId}/avatar`). [contentType] (e.g. `image/png`) is bound
+  /// into the signed URL so the upload is rejected if the client sends
+  /// a different type.
+  ///
+  /// Returns `(uploadUrl, path)`. After the PUT succeeds the caller
+  /// records the path on the [User] record via [save]; subsequent
+  /// reads then return a freshly signed download URL in `avatarUrl`.
+  Future<({String uploadUrl, String path})> createAvatarUploadUrl({
+    required String userId,
+    required String contentType,
+  });
 }
