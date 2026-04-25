@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../models/user.dart';
 import '../repositories/i_user_repository.dart';
 
@@ -39,6 +41,27 @@ class MockUserRepository implements IUserRepository {
     return user;
   }
 
+  /// Recorded avatar uploads, keyed by userId — for test assertions.
+  final Map<String, ({Uint8List bytes, String contentType})>
+      uploadedAvatars = {};
+
   @override
-  Future<String?> uploadAvatar(String userId) async => null;
+  Future<String?> uploadAvatar({
+    required String userId,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    uploadedAvatars[userId] = (bytes: bytes, contentType: contentType);
+    return '$userId/avatar';
+  }
+
+  @override
+  Future<String?> getAvatarSignedUrl({
+    required String path,
+    Duration expiresIn = const Duration(hours: 1),
+  }) async {
+    final userId = path.split('/').first;
+    if (!uploadedAvatars.containsKey(userId)) return null;
+    return 'mock://signed/$path?expires=${expiresIn.inSeconds}';
+  }
 }

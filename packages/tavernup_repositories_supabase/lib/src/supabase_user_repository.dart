@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:supabase/supabase.dart' hide User;
 import 'package:tavernup_domain/tavernup_domain.dart';
+
+const _avatarsBucket = 'avatars';
 
 /// Supabase implementation of [IUserRepository].
 ///
@@ -43,8 +47,38 @@ class SupabaseUserRepository implements IUserRepository {
   }
 
   @override
-  Future<String?> uploadAvatar(String userId) async {
-    // TODO: implement avatar upload via Supabase Storage
-    return null;
+  Future<String?> uploadAvatar({
+    required String userId,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final path = '$userId/avatar';
+    try {
+      await _client.storage.from(_avatarsBucket).uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: contentType,
+              upsert: true,
+            ),
+          );
+      return path;
+    } on StorageException {
+      return null;
+    }
+  }
+
+  @override
+  Future<String?> getAvatarSignedUrl({
+    required String path,
+    Duration expiresIn = const Duration(hours: 1),
+  }) async {
+    try {
+      return await _client.storage
+          .from(_avatarsBucket)
+          .createSignedUrl(path, expiresIn.inSeconds);
+    } on StorageException {
+      return null;
+    }
   }
 }
